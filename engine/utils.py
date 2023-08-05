@@ -42,11 +42,11 @@ def mix(color1, color2, t):
 
 
 def chrange(
-    x: float,
-    initial_range: tuple[float, float],
-    target_range: tuple[float, float],
-    power=1,
-    flipped=False,
+        x: float,
+        initial_range: tuple[float, float],
+        target_range: tuple[float, float],
+        power=1,
+        flipped=False,
 ):
     """Change the range of a number by mapping the initial_range to target_range using a linear transformation."""
     normalised = (x - initial_range[0]) / (initial_range[1] - initial_range[0])
@@ -54,6 +54,15 @@ def chrange(
         normalised = 1 - normalised
     normalised **= power
     return normalised * (target_range[1] - target_range[0]) + target_range[0]
+
+
+def rrange(nb: float):
+    """Return a range with a length of `nb` in expectation."""
+    qte = int(nb)
+    proba = nb - qte
+    if random.random() < proba:
+        return range(qte + 1)
+    return range(qte)
 
 
 def from_polar(r: float, angle: float):
@@ -251,7 +260,7 @@ def overlay(image: pygame.Surface, color, alpha=255):
 
 
 def random_in_rect_and_avoid(
-    rect: pygame.Rect, avoid_positions, avoid_radius, max_trials=1000, force_y=None, default=None,
+        rect: pygame.Rect, avoid_positions, avoid_radius, max_trials=1000, force_y=None, default=None,
 ):
     for trial in range(max_trials):
         if force_y is not None:
@@ -301,6 +310,7 @@ def from_hsv(hue, saturation, value, alpha=100):
     color = pygame.Color(0)
     color.hsva = hue, saturation, value, alpha
     return color
+
 
 def gradient(t: float, *color_spec: tuple[float, ColorValue]) -> pygame.Color:
     """
@@ -365,6 +375,7 @@ __all__ = [
     "get_tile",
     "mix",
     "chrange",
+    "rrange",
     "from_polar",
     "clamp",
     "angle_towards",
@@ -386,3 +397,9 @@ __all__ = [
     "gradient",
     "Cooldown",
 ]
+
+
+# This just helps me to remember to add new utilities to __all__
+for name, f in list(globals().items()):
+    if name not in __all__ and callable(f):
+        raise RuntimeError(f"{name} is not exported, did you forget to add it to __all__?")

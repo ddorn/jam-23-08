@@ -1,5 +1,5 @@
 from random import gauss
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import Optional, Tuple, TYPE_CHECKING, Generator
 
 import pygame
 
@@ -32,7 +32,7 @@ class Scriptable:
     def __init__(self):
         self.scripts = set()
 
-    def add_script(self, generator):
+    def add_script(self, generator: Generator):
         self.scripts.add(generator)
 
     def add_script_decorator(self, function):

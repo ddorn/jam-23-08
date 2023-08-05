@@ -129,7 +129,7 @@ class Debug(Object):
         y = 3
         for i, obj in enumerate(self.texts):
             color = WHITE if len(self.texts) - i - 1 >= self.nb_txt_this_frame else YELLOW
-            s = text(" ".join(map(str, obj)), 7, color, "pixelmillennium")
+            s = text(" ".join(map(str, obj)), SMALL_TEXT_SIZE, color, "pixelmillennium")
             r = gfx.blit(s, topleft=(3, y), ui=True)
             y = r.bottom
 

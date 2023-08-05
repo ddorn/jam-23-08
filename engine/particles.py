@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 from engine.assets import text
-from engine.utils import bounce, exp_impulse, random_in_rect, random_in_rect_and_avoid
+from engine.utils import bounce, exp_impulse, random_in_rect, random_in_rect_and_avoid, rrange, clamp, from_polar
 from engine.gfx import GFX
 
 pygame.init()
@@ -41,30 +41,8 @@ SNOW = pygame.image.fromstring(
 )
 
 
-def clamp(x, mini=0.0, maxi=1.0):
-    if x < mini:
-        return mini
-    if x > maxi:
-        return maxi
-    return x
-
-
 def vec2int(vec):
     return (int(vec[0]), int(vec[1]))
-
-
-def polar(r, phi: DEGREES):
-    v = Vector2()
-    v.from_polar((r, phi))
-    return v
-
-
-def rrange(nb: float):
-    qte = int(nb)
-    proba = nb - qte
-    if random() < proba:
-        return range(qte + 1)
-    return range(qte)
 
 
 def rand2d(vec):
@@ -172,7 +150,7 @@ class ParticleFountain:
             lambda: CircleParticle()
             .builder()
             .hsv(angle := uniform(0, 360), 0.8, 0.8)
-            .at(choice(positions) + polar(40, angle), angle + 90)
+            .at(choice(positions) + from_polar(40, angle), angle + 90)
             .velocity(gauss(2, 0.2), )
             .sized(gauss(5, 2))
             # .acceleration(-0.005)
@@ -470,7 +448,7 @@ class PolygonParticle(DrawnParticle):
     def draw(self, gfx: GFX):
         points = [
             self.pos
-            + polar(self.size, self.inner_rotation + i * 360 / self.vertices * self.vertex_step, )
+            + from_polar(self.size, self.inner_rotation + i * 360 / self.vertices * self.vertex_step, )
             for i in range(self.vertices)
         ]
 
@@ -479,7 +457,7 @@ class PolygonParticle(DrawnParticle):
     def draw_no_gfx(self, surf):
         points = [
             self.pos
-            + polar(self.size, self.inner_rotation + i * 360 / self.vertices * self.vertex_step, )
+            + from_polar(self.size, self.inner_rotation + i * 360 / self.vertices * self.vertex_step, )
             for i in range(self.vertices)
         ]
 
@@ -500,7 +478,7 @@ class ShardParticle(DrawnParticle):
         self.head = head
 
     def points(self):
-        vel = polar(self.speed, self.angle)
+        vel = from_polar(self.speed, self.angle)
         vel.scale_to_length(self.size)
         cross = Vector2(-vel.y, vel.x)
 
@@ -526,11 +504,11 @@ class LineParticle(DrawnParticle):
         super().__init__(color)
 
     def draw(self, gfx: GFX):
-        end = self.pos - polar(self.length, self.angle)
+        end = self.pos - from_polar(self.length, self.angle)
         gfx.line(self.color, self.pos, end)
 
     def draw_no_gfx(self, surf):
-        end = vec2int(self.pos - polar(self.length, self.angle))
+        end = vec2int(self.pos - from_polar(self.length, self.angle))
         start = vec2int(self.pos)
         # noinspection PyTypeChecker
         pygame.gfxdraw.line(surf, *start, *end, self.color)

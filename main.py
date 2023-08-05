@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import math
-from functools import cache
-from random import gauss, uniform
+from random import gauss, random, randrange
 from time import time
 
 import numpy as np
@@ -10,7 +9,6 @@ import pygame.gfxdraw
 from pygame import Rect
 
 from engine import *
-from engine.particles import rrange
 from utility import smooth_breathing
 
 PINK = pygame.Color("#E91E63")
@@ -138,21 +136,31 @@ class Blob(Object):
                 fairy.alive = False
                 self.hist_size += 3
                 for i in range(self.n_points):
-                    color = self.color(i)
-                    angle = color.hsva[0]
+                    angle = i * 360 / self.n_points
+                    color = from_hsv(angle, 70, 90)
                     self.state.particles.add(
                         ShardParticle(color)
                         .builder()
                         .at(self.center + from_polar(self.radius, angle), angle)
-                        .velocity(8, 1)
+                        .velocity(8)
                         .anim_fade(0.2)
                         .build()
                     )
 
+                self.add_speed_buff(fairy.hue)
+
                 for _ in rrange(1.5):
-                    self.state.add(Fairy(random_in_rect(SCREEN.move(self.pos - (W/2, H/2)))))
+                    self.state.add(Fairy(random_in_rect(SCREEN.move(self.pos - (W / 2, H / 2)))))
 
         self.hist_size = min(self.hist_size, self.max_hist_size)
+        self.state.debug.text(self.pos)
+
+    def add_speed_buff(self, angle: float):
+        @self.add_script_decorator
+        def speed_buff():
+            for _ in range(10):
+                self.vel = from_polar(30, angle)
+                yield
 
     def draw(self, gfx: GFX, force_alpha: float | None = None):
         super().draw(gfx)
@@ -162,26 +170,14 @@ class Blob(Object):
             else:
                 multiplier = 1 - (self.time - t) / self.hist_size
 
-            # circle = self.get_circle(int(radius), tuple(color))
-            # circle.set_alpha(int(255 * multiplier))
-            # gfx.blit(circle, center=point)
             gfx.circle(fainter(color, multiplier), point, radius)
-
-    @staticmethod
-    @cache
-    def get_circle(radius: int, color: pygame.Color) -> pygame.Surface:
-        size = 2 * radius + 1
-        img = pygame.Surface((size, size), pygame.SRCCOLORKEY | pygame.RLEACCEL)
-        img.set_colorkey((0, 0, 0))
-        pygame.draw.circle(img, color, (radius, radius), radius)
-        return img
 
 
 class Fairy(SpriteObject):
     radius = 40  # For collision detection
 
     def __init__(self, pos):
-        self.hue = uniform(0, 360)
+        self.hue = randrange(0, 360, 60)
         img = pygame.Surface((80, 80), pygame.SRCALPHA)
         super().__init__(pos, img, )
 
@@ -189,7 +185,7 @@ class Fairy(SpriteObject):
         for _ in range(256):
             x = gauss(40, 6)
             y = gauss(40, 6)
-            radius = max(2, gauss(5, 2))
+            radius = max(2.0, gauss(5, 2))
             color = from_hsv(gauss(self.hue, 10), 70, 90)
             pygame.draw.circle(self.image, color, (x, y), radius)
 
@@ -207,7 +203,7 @@ class Fairy(SpriteObject):
 
 class GameState(State):
     BG_COLOR = None
-    FPS = 1000
+    FPS = 60
 
     def __init__(self):
         super().__init__()
@@ -215,16 +211,16 @@ class GameState(State):
         self.fog.fill(WHITE)
 
         self.blob = self.add(Blob(
-            W / 2,
-            H / 2,
-            10,
-            6,
-            6,
-            True,
-            acceleration=3,
-            friction=0.8,
-            hist_size=10,
-            max_hist_size=50,
+            0,
+            0,
+        10,
+        6,
+        6,
+        True,
+        acceleration = 3,
+        friction = 0.8,
+        hist_size = 10,
+        max_hist_size = 50,
         ))
         self.use_fog = True
         self.debug.toggle()
@@ -245,6 +241,17 @@ class GameState(State):
     def logic(self):
         super().logic()
 
+        # Create new fairies below
+        if random() < 0.01:
+            self.add(Fairy(random_in_rect(SCREEN.move(self.blob.pos - (W / 2, -H / 2)))))
+
+        # De-pop objects that are too far away if we have too many
+        fairies = list(self.get_all(Fairy))
+        if len(fairies) > 100:
+            sorted_objects = sorted(fairies, key=lambda o: o.pos.distance_to(self.blob.pos))
+            for o in sorted_objects[100:]:
+                o.alive = False
+
         # if self.timer == 20 * self.FPS:
         #     self.particles.fountains.append(ParticleFountain.screen_confetti(SCREEN))
 
@@ -264,7 +271,6 @@ class GameState(State):
                             )
         gfx.surf.fill(bg_color)
 
-
         s = smooth_breathing(time())
         s256 = int(s * 255)
 
@@ -275,6 +281,7 @@ class GameState(State):
             gfx.surf.blit(self.fog, (0, 0))
 
         super().draw(gfx)
+
 
 def main():
     App(GameState, FixedScreen(SIZE), CameraGFX).run()
