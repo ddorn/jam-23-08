@@ -55,13 +55,13 @@ class HealthBar(Object):
         lost = self.size.x - width - flash
 
         x, y = self.pos
-        gfx.box((*self.pos, width, self.size.y), self.color)
+        gfx.box(self.color, (*self.pos, width, self.size.y))
         if flash > 0:
-            gfx.box((x + width, y, flash, self.size.y), WHITE + (self.color.a,))
+            gfx.box(WHITE + (self.color.a,), (x + width, y, flash, self.size.y))
 
         if lost > 0:
             gfx.box(
-                (x + width + flash, y, lost, self.size.y,), (self.empty_color),
+                self.empty_color, (x + width + flash, y, lost, self.size.y,),
             )
 
         if self.show_hp:

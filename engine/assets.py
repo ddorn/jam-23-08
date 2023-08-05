@@ -9,6 +9,23 @@ from .settings import settings
 from .utils import overlay
 
 
+__all__ = [
+    "sound",
+    "play",
+    "image",
+    "rotate",
+    "scale",
+    "font",
+    "text",
+    "colored_text",
+    "wrapped_text",
+    "tilemap",
+    "Image",
+    "SpriteSheet",
+    "Assets",
+    "Animation",
+]
+
 @lru_cache()
 def sound(name):
     file = SFX / (name + ".wav")

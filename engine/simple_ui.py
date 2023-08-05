@@ -90,10 +90,10 @@ class Title(Object):
         if not self.scripts:
             self.alive = False
 
-    def draw(self, gfx: "GFX"):
+    def draw(self, gfx: GFX):
         super().draw(gfx)
-        gfx.box(self.bg_rect, (0, 0, 0, 80))
-        gfx.rect(*self.bg_rect, self.color, 1)
+        gfx.box((0, 0, 0, 80), self.bg_rect)
+        gfx.rect(self.color, *self.bg_rect, 1)
         gfx.blit(self.shown_image, center=self.center)
 
 

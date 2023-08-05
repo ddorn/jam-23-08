@@ -1,11 +1,15 @@
-from contextlib import contextmanager
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Union
 
 import pygame
 import pygame.gfxdraw
+from pygame import Vector2, Rect
 
-from .assets import text, wrapped_text
+if TYPE_CHECKING:
+    from pygame._common import ColorValue, RectValue
 
-__all__ = ["GFX"]
+__all__ = ["GFX", "WrapGFX", "CameraGFX"]
 
 
 # /!\ Experimental class.
@@ -22,22 +26,83 @@ __all__ = ["GFX"]
 #
 # For now, just think of GFX as a wrapper around pygame.Surface with a better .blit() method.
 
+Vec2Like = Union[tuple[int, int], Vector2]
 
 class GFX:
     def __init__(self, surf: pygame.Surface):
         self.surf = surf
-        self.world_center = pygame.Vector2(0, 0)
-        """World coordinates that are in the center of the screen."""
-        self.world_scale = 1
-        """How many pixel is one world unit."""
-        self.ui_scale = 1
 
-        self.translation = pygame.Vector2()
-        """Translate all draw/blit by this amount."""
+    def blit(self, surf, ui: bool = False, **anchor):
+        """Blit a surface directly on the underlying surface, coordinates are in pixels."""
+        r = surf.get_rect(**self.edit_anchor(anchor, ui))
+        self.surf.blit(surf, r)
+        return r
 
-    # Positions / size conversion functions
+    # Draw functions
+
+    def line(self, color: ColorValue, start_pos: Vec2Like, end_pos: Vec2Like, ui: bool = False):
+        """Draw a line in world coordinates. Does not support alpha."""
+        start_pos = self.edit_pos(start_pos, ui)
+        end_pos = self.edit_pos(end_pos, ui)
+        pygame.draw.line(self.surf, color, start_pos, end_pos)
+
+    def rect(self, color: ColorValue, x, y, w, h, width=0, anchor: str = None):
+        """Draw a rectangle in world coordinates. Does not support alpha for width != 0."""
+        x, y = self.edit_pos((x, y))
+        r = pygame.Rect(x, y, w, h)
+
+        if anchor:
+            setattr(r, anchor, (x, y))
+
+        if width == 0:
+            pygame.gfxdraw.box(self.surf, r, color)
+        else:
+            pygame.draw.rect(self.surf, color, r, width)
+
+    def box(self, color: ColorValue, rect: RectValue):
+        """Draw a filled rectangle in world coordinates. Supports alpha."""
+        rect = self.edit_rect(Rect(rect))
+        pygame.gfxdraw.box(self.surf, rect, color)
+
+    def polygon(self, color: ColorValue, points: list[Vec2Like], width: int = 0, ui: bool = False):
+        """Draw a polygon in world coordinates. Does not support alpha for width != 0."""
+        points = [self.edit_pos(p, ui) for p in points]
+        if width == 0:
+            pygame.gfxdraw.filled_polygon(self.surf, points, color)
+        else:
+            pygame.gfxdraw.aapolygon(self.surf, points, color)
+
+
+    def circle(self, color: ColorValue, pos: Vec2Like, radius: float, width: int = 0, ui: bool = False):
+        """Draw a circle in world coordinates. Supports alpha for width = 0 or 1."""
+        pos = self.edit_pos(pos, ui)
+
+        if width == 0:
+            pygame.gfxdraw.filled_circle(self.surf, round(pos.x), round(pos.y), round(radius), color)
+        elif width == 1:
+            pygame.gfxdraw.aacircle(self.surf, round(pos.x), round(pos.y), round(radius), color)
+        else:
+            pygame.draw.circle(self.surf, color, pos, radius, width)
+
+    # For subclasses to manipulate coordinates
+
+    def edit_pos(self, pos: Vec2Like, ui: bool = False):
+        return pos
+
+    def edit_rect(self, rect: RectValue, ui: bool = False):
+        rect.center = self.edit_pos(rect.center, ui)
+        return rect
+
+    def edit_anchor(self, anchor, ui: bool = False):
+        anchor, value = anchor.popitem()
+        value = self.edit_pos(value, ui)
+        return {anchor: value}
+
+    # Below are functions that need a closer look
 
     '''
+    # Position / size conversion functions
+
     def to_ui(self, pos):
         """Convert a position in the screen to ui coordinates."""
         return pygame.Vector2(pos) / self.ui_scale
@@ -89,43 +154,6 @@ class GFX:
         r = s.get_rect(**{anchor: pos * self.world_scale})
         r.topleft -= self.world_center
         self.surf.blit(s, r)
-    '''
-
-    def blit(self, surf, **anchor):
-        """Blit a surface directly on the underlying surface, coordinates are in pixels."""
-
-        r = surf.get_rect(**anchor)
-        r.topleft += self.translation
-        self.surf.blit(surf, r)
-
-        return r
-
-    def text(self, txt, size, color, font_name=None, **anchor):
-        """Draw a text on the screen."""
-        t = text(txt, size, color, font_name)
-        return self.blit(t, **anchor)
-
-    def wrap_text(self, txt, size, color, max_width, font_name=None, align=False, **anchor):
-        t = wrapped_text(txt, size, color, max_width, font_name, align)
-        return self.blit(t, **anchor)
-
-    # Draw functions
-
-    def rect(self, x, y, w, h, color, width=0, anchor: str = None):
-        """Draw a rectangle in rect coordinates."""
-        r = pygame.Rect(x, y, w * self.world_scale, h * self.world_scale)
-
-        if anchor:
-            setattr(r, anchor, (x, y))
-
-        r.topleft += self.translation
-
-        pygame.draw.rect(self.surf, color, r, width)
-
-    def box(self, rect, color):
-        rect = pygame.Rect(rect)
-        rect.topleft += self.translation
-        pygame.gfxdraw.box(self.surf, rect, color)
 
     def grid(self, surf, pos, blocks, steps, color=(255, 255, 255, 100)):
         """
@@ -140,8 +168,8 @@ class GFX:
         """
 
         top, left = self.scale_world_pos(*pos)
-        bottom = top + steps * self.world_scale
-        right = left + steps * self.world_scale
+        bottom = top + steps
+        right = left + steps
         for x in range(blocks[0] + 1):
             pygame.gfxdraw.line(surf, x, top, x, bottom, color)
         for y in range(blocks[0] + 1):
@@ -168,3 +196,54 @@ class GFX:
         self.surf.set_clip(previous_clip)
         if previous_clip:
             self.translation = pygame.Vector2(previous_clip.topleft)
+
+    # UI functions
+
+    def text(self, txt, size, color, font_name=None, **anchor):
+        """Draw a text on the screen."""
+        t = text(txt, size, color, font_name)
+        return self.blit(t, **anchor)
+
+    def wrap_text(self, txt, size, color, max_width, font_name=None, align=False, **anchor):
+        t = wrapped_text(txt, size, color, max_width, font_name, align)
+        return self.blit(t, **anchor)
+
+    '''
+
+
+class CameraGFX(GFX):
+
+    def __init__(self, surf: pygame.Surface):
+        super().__init__(surf)
+        self.translation = pygame.Vector2()
+        """World coordinates that are in the center of the screen."""
+
+    @property
+    def world_center(self) -> Vector2:
+        """Set the world coordinates that are in the center of the screen."""
+        return -self.translation + pygame.Vector2(self.surf.get_size()) / 2
+
+    @world_center.setter
+    def world_center(self, pos: Vec2Like):
+        self.translation = -pygame.Vector2(pos) + pygame.Vector2(self.surf.get_size()) / 2
+
+    def edit_pos(self, pos: Vec2Like, ui: bool = False):
+        if ui:
+            return pos
+        return pos + self.translation
+
+
+class WrapGFX(GFX):
+
+    def edit_pos(self, pos: Vec2Like, ui: bool = False):
+        """Return position so that it is on screen as if the screen was a torus."""
+        # We need to copy here, modifying in place might affect the user
+        if ui:
+            return pos
+        pos = Vector2(pos)
+        pos.x %= self.surf.get_width()
+        pos.y %= self.surf.get_height()
+        return pos
+
+
+

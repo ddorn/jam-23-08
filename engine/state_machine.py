@@ -151,15 +151,15 @@ class State(Scriptable):
                     obj.draw(gfx)
             # We draw particles after the 0-th layer.
             if z >= 0 and not did_draw_particles:
-                self.particles.draw(gfx.surf)
+                self.particles.draw(gfx)
                 did_draw_particles = True
 
         if not did_draw_particles:
-            self.particles.draw(gfx.surf)
+            self.particles.draw(gfx)
 
         if self.shake:
             s = 3
-            gfx.scroll(randint(-s, s), randint(-s, s))
+            gfx.surf.scroll(randint(-s, s), randint(-s, s))
             self.shake -= 1
 
     def handle_events(self, events):

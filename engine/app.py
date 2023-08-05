@@ -27,12 +27,13 @@ class App(StateMachine):
     MAIN_APP: "App" = None
     MOUSE_VISIBLE = True
 
-    def __init__(self, initial_state: Type[State], resizing: Screen):
+    def __init__(self, initial_state: Type[State], resizing: Screen, gfx_class: Type[GFX] = GFX):
         App.MAIN_APP = self
 
         self.clock = pygame.time.Clock()
         self.screen = resizing
-        self.gfx = GFX(self.screen.draw_surface)
+        self.gfx_class = gfx_class
+        self.gfx = self.gfx_class(self.screen.draw_surface)
         pygame.display.set_caption(self.NAME)
 
         pygame.mouse.set_visible(self.MOUSE_VISIBLE)
@@ -67,7 +68,7 @@ class App(StateMachine):
             if event.type == pygame.VIDEORESIZE:
                 old = self.screen.draw_surface.get_size()
                 self.screen.resize(event.size)
-                self.gfx = GFX(self.screen.draw_surface)
+                self.gfx = self.gfx_class(self.screen.draw_surface)
                 new = self.screen.draw_surface.get_size()
                 if old != new:
                     self.state.resize(old, new)

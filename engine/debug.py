@@ -5,7 +5,6 @@ from pygame import Vector2
 from .assets import *
 from .constants import *
 from .object import Object
-from .utils import *
 
 __all__ = ["Debug"]
 
@@ -24,7 +23,7 @@ class Debug(Object):
 
     The Debug can be enabled or disabled with .toggle(). It draws nothing
     when disabled.
-    The Debug can be paused, in which case its data becomes persistant and is not
+    The Debug can be paused, in which case its data becomes persistent and is not
     erased every frame.
     """
 
@@ -108,30 +107,30 @@ class Debug(Object):
             return
 
         fps = len(self.frame_times) / (self.frame_times[-1] - self.frame_times[0])
-        s = text(f"FPS: {int(fps)}", 7, WHITE, "pixelmillennium")
-        gfx.blit(s, bottomleft=(4, H - 4))
+        s = text(f"FPS: {int(fps)}", SMALL_TEXT_SIZE, WHITE, "pixelmillennium")
+        gfx.blit(s, bottomleft=(4, H - 4), ui=True)
 
         if self.paused:
             # Restore the last data.
-            # This means new data is just erased, but it shouldn't be a propblem
+            # This means new data is just erased, but it shouldn't be a problem
             # as no new input should come when paused.
-            # Otherwise we will have to extend it.
+            # Otherwise, we will have to extend it.
             self.points, self.vectors, self.rects, self.texts = self.lasts
 
         for (x, y, color) in self.points:
-            pygame.draw.circle(gfx.surf, color, (x, y), 1)
+            gfx.circle(color, (x, y), 1)
 
         for (anchor, vec, color) in self.vectors:
-            pygame.draw.line(gfx.surf, color, anchor, anchor + vec)
+            gfx.line(color, anchor, anchor + vec)
 
         for rect, color in self.rects:
-            pygame.draw.rect(gfx.surf, color, rect, 1)
+            gfx.rect(color, *rect, width=1)
 
         y = 3
         for i, obj in enumerate(self.texts):
             color = WHITE if len(self.texts) - i - 1 >= self.nb_txt_this_frame else YELLOW
             s = text(" ".join(map(str, obj)), 7, color, "pixelmillennium")
-            r = gfx.blit(s, topleft=(3, y))
+            r = gfx.blit(s, topleft=(3, y), ui=True)
             y = r.bottom
 
         # Archiving of the data, so that we can get them back if we are paused.

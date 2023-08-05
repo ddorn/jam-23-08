@@ -3,7 +3,7 @@ from pathlib import Path
 import pygame
 
 GAME_NAME = "XXX"
-SIZE = (640, 360)
+SIZE = 1600, 800
 W, H = SIZE
 USE_DELTA_TIME = False
 
@@ -18,6 +18,8 @@ GREEN = (166, 226, 46)
 
 SMALL_FONT = "pixelmillennium"
 BIG_FONT = "ThaleahFat"
+SMALL_TEXT_SIZE = 16
+BIG_TEXT_SIZE = 32
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 IMAGES = ASSETS_DIR / "images"

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-
 import bisect
-from contextlib import contextmanager
-from functools import lru_cache
-from math import exp
-from random import randrange, uniform
-from typing import Tuple, TYPE_CHECKING
+import contextlib
+import functools
+import math
+import random
+import types
+import typing
 
 import pygame
 
-if TYPE_CHECKING:
+if typing.TYPE_CHECKING:
     from pygame._common import ColorValue
 
 
@@ -19,14 +19,14 @@ def vec2int(vec):
     return int(vec[0]), int(vec[1])
 
 
-@lru_cache()
+@functools.lru_cache()
 def load_img(path, alpha=False):
     if alpha:
         return pygame.image.load(path).convert_alpha()
     return pygame.image.load(path).convert()
 
 
-@lru_cache()
+@functools.lru_cache()
 def get_tile(tilesheet: pygame.Surface, size, x, y, w=1, h=1):
     return tilesheet.subsurface(x * size, y * size, w * size, h * size)
 
@@ -43,8 +43,8 @@ def mix(color1, color2, t):
 
 def chrange(
     x: float,
-    initial_range: Tuple[float, float],
-    target_range: Tuple[float, float],
+    initial_range: tuple[float, float],
+    target_range: tuple[float, float],
     power=1,
     flipped=False,
 ):
@@ -93,8 +93,8 @@ def random_in_rect(rect: pygame.Rect, x_range=(0.0, 1.0), y_range=(0.0, 1.0)):
     w, h = rect.size
 
     return (
-        uniform(rect.x + w * x_range[0], rect.x + w * x_range[1]),
-        uniform(rect.y + h * y_range[0], rect.y + h * y_range[1]),
+        random.uniform(rect.x + w * x_range[0], rect.x + w * x_range[1]),
+        random.uniform(rect.y + h * y_range[0], rect.y + h * y_range[1]),
     )
 
 
@@ -107,7 +107,7 @@ def random_in_surface(surf: pygame.Surface, max_retries=100):
     color_key = surf.get_colorkey()
     with lock(surf):
         for _ in range(max_retries):
-            pos = randrange(w), randrange(h)
+            pos = random.randrange(w), random.randrange(h)
             color = surf.get_at(pos)
             if not (color == color_key or color[3] == 0):
                 # Pixel is not transparent.
@@ -115,7 +115,7 @@ def random_in_surface(surf: pygame.Surface, max_retries=100):
         return (w // 2, h // 2)
 
 
-@contextmanager
+@contextlib.contextmanager
 def lock(surf):
     """A simple context manager to automatically lock and unlock the surface."""
     surf.lock()
@@ -172,7 +172,7 @@ def bounce(x, f=0.2, k=60):
     """
 
     s = max(x - f, 0.0)
-    return min(x * x / (f * f), 1 + (2.0 / f) * s * exp(-k * s))
+    return min(x * x / (f * f), 1 + (2.0 / f) * s * math.exp(-k * s))
 
 
 def exp_impulse(x, k):
@@ -195,10 +195,10 @@ def exp_impulse(x, k):
     """
 
     h = k * x
-    return h * exp(1.0 - h)
+    return h * math.exp(1.0 - h)
 
 
-def exp_impluse_integral(k):
+def exp_impulse_integral(k):
     """
     Value of the integral of exp_impulse between 0 and 1.
 
@@ -206,7 +206,7 @@ def exp_impluse_integral(k):
     if exp_impulse is used to change a velocity.
     """
 
-    return exp(1 - k) * (-k + exp(k) - 1) / k
+    return math.exp(1 - k) * (-k + math.exp(k) - 1) / k
 
 
 def auto_crop(surf: pygame.Surface):
@@ -235,7 +235,7 @@ def outline(surf: pygame.Surface, color=(255, 255, 255)):
     return output
 
 
-@lru_cache(1000)
+@functools.lru_cache(1000)
 def overlay(image: pygame.Surface, color, alpha=255):
     img = pygame.Surface(image.get_size())
     img.fill(1)  # 1 is a color unlikely to be used (hopefully)
@@ -255,7 +255,7 @@ def random_in_rect_and_avoid(
 ):
     for trial in range(max_trials):
         if force_y is not None:
-            pos = uniform(rect.left, rect.right), force_y
+            pos = random.uniform(rect.left, rect.right), force_y
         else:
             pos = random_in_rect(rect)
 
@@ -276,28 +276,30 @@ def random_rainbow_color(saturation=100, value=100):
         saturation: integer between 0 and 100
         value: integer between 0 and 100
     """
-    hue = randrange(0, 360)
+    hue = random.randrange(0, 360)
     color = pygame.Color(0)
     color.hsva = hue, saturation, value, 100
     return color
 
 
-def from_hsv(hue, saturation, value):
+def from_hsv(hue, saturation, value, alpha=100):
     """
-    Create a color from HSV values. Clamp the values to the correct range.
+    Create a color from HSV values.
 
     Args:
         hue: The hue of the color, between 0 and 360
-        saturation: The saturation of the color, between 0 and 100
-        value: The value of the color, between 0 and 100
+        saturation: The saturation of the color, between 0 and 100. Out of range values are clamped.
+        value: The value of the color, between 0 and 100. Out of range values are clamped.
+        alpha: The alpha of the color, between 0 and 100. Out of range values are clamped.
     """
 
     hue = hue % 360
     saturation = max(0, min(100, saturation))
     value = max(0, min(100, value))
+    alpha = max(0, min(100, alpha))
 
     color = pygame.Color(0)
-    color.hsva = hue, saturation, value, 100
+    color.hsva = hue, saturation, value, alpha
     return color
 
 def gradient(t: float, *color_spec: tuple[float, ColorValue]) -> pygame.Color:
@@ -355,3 +357,32 @@ class Cooldown:
             self.locked_for = self.auto_lock
             return True
         return False
+
+
+__all__ = [
+    "vec2int",
+    "load_img",
+    "get_tile",
+    "mix",
+    "chrange",
+    "from_polar",
+    "clamp",
+    "angle_towards",
+    "random_in_rect",
+    "random_in_surface",
+    "lock",
+    "clamp_length",
+    "part_perp_to",
+    "prop_in_rect",
+    "bounce",
+    "exp_impulse",
+    "exp_impulse_integral",
+    "auto_crop",
+    "outline",
+    "overlay",
+    "random_in_rect_and_avoid",
+    "random_rainbow_color",
+    "from_hsv",
+    "gradient",
+    "Cooldown",
+]
