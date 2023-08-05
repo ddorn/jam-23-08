@@ -107,8 +107,7 @@ class Debug(Object):
             return
 
         fps = len(self.frame_times) / (self.frame_times[-1] - self.frame_times[0])
-        s = text(f"FPS: {int(fps)}", SMALL_TEXT_SIZE, WHITE, "pixelmillennium")
-        gfx.blit(s, bottomleft=(4, H - 4), ui=True)
+        gfx.text(WHITE, f"FPS: {int(fps)}", SMALL_TEXT_SIZE, SMALL_FONT, bottomleft=(4, H - 4))
 
         if self.paused:
             # Restore the last data.
@@ -129,8 +128,7 @@ class Debug(Object):
         y = 3
         for i, obj in enumerate(self.texts):
             color = WHITE if len(self.texts) - i - 1 >= self.nb_txt_this_frame else YELLOW
-            s = text(" ".join(map(str, obj)), SMALL_TEXT_SIZE, color, "pixelmillennium")
-            r = gfx.blit(s, topleft=(3, y), ui=True)
+            r = gfx.text(color, " ".join(map(str, obj)), SMALL_TEXT_SIZE, SMALL_FONT, topleft=(3, y))
             y = r.bottom
 
         # Archiving of the data, so that we can get them back if we are paused.

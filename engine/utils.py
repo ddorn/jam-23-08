@@ -72,12 +72,84 @@ def from_polar(r: float, angle: float):
     return vec
 
 
-def clamp(x, mini, maxi):
+def clamp(x: float, mini: float, maxi: float):
+    """Clamp a number between mini and maxi."""
     if x < mini:
         return mini
     if x > maxi:
         return maxi
     return x
+
+
+def smoothstep(x, x_min: float = 0, x_max: float = 1, n: int = 1):
+    """
+    Smoothstep function. See https://en.wikipedia.org/wiki/Smoothstep.
+
+    Args:
+        x: The value to interpolate.
+        x_min: The minimum value that the function can take.
+        x_max: The maximum value that the function can take.
+        n: The degree of the polynomial used to interpolate.
+
+    Returns:
+        A value between 0 and 1.
+    """
+
+    x = clamp((x - x_min) / (x_max - x_min), 0, 1)
+
+    result = 0
+    for k in range(0, n + 1):
+        result += math.comb(k + n, k) * math.comb(2 * n + 1, n - k) * (-x) ** k
+
+    result *= x ** (n + 1)
+
+    return result
+
+
+def soft_clamp(x, mini: float, maxi: float, smooth_size: float):
+    """Clamp a number between mini and maxi, but in a smooth way.
+
+    Outside the ranges mini ± smooth_size and maxi ± smooth_size, the function
+    takes the same value as clamp. Between these ranges, the function has a
+    continuous derivative.
+
+    What I want for the interpolation part:
+    - f(-1) = 0
+    - f(1) = 1
+    - f'(-1) = 0
+    - f'(1) = 1
+
+    f(x) = ax^3 + bx^2 + cx + d
+    f'(x) = 3ax^2 + 2bx + c
+    The system is:
+    -a + b - c + d = 0
+    a + b + c + d = 1
+    3a - 2b + c = 0
+    3a + 2b + c = 1
+    The solution is:
+    a = 0; b = 1/4; c = 1/2; d = 1/4
+
+    So:
+    f(x) = 1/4 * x^2 + 1/2 * x + 1/4
+    """
+
+    def f(x):
+        return x ** 2 / 4 + x / 2 + 1 / 4
+
+    ss = smooth_size / 2
+
+    if x < mini - ss:
+        return mini
+    elif x < mini + ss:
+        prop = chrange(x, (mini - ss, mini + ss), (-1, 1))
+        return mini + smooth_size * f(prop) / 2
+    elif x < maxi - ss:
+        return x
+    elif x < maxi + ss:
+        prop = chrange(x, (maxi - ss, maxi + ss), (-1, 1))
+        return maxi - smooth_size * f(-prop) / 2
+    else:
+        return maxi
 
 
 def angle_towards(start, goal, max_movement):
@@ -211,11 +283,34 @@ def exp_impulse_integral(k):
     """
     Value of the integral of exp_impulse between 0 and 1.
 
-    Can be used to determine the toal change in position
+    Can be used to determine the total change in position
     if exp_impulse is used to change a velocity.
     """
 
     return math.exp(1 - k) * (-k + math.exp(k) - 1) / k
+
+
+def soft_plus(x: float, k: float = 1.0):
+    """
+    A smooth approximation of the ReLU function.
+
+    Graph:
+        1│       /
+         │     /
+        0│__-'
+         ┼———┼-——————————
+         0  │    1
+            ╰ 0
+
+    Args:
+        x: Input value
+        k: Controls the smoothness of the function, the higher the sharper.
+    """
+
+    if x * k > 40:
+        # Avoid overflow, it's only the identity function in this range anyway.
+        return x
+    return math.log(1 + math.exp(k * x)) / k
 
 
 def auto_crop(surf: pygame.Surface):
@@ -378,6 +473,8 @@ __all__ = [
     "rrange",
     "from_polar",
     "clamp",
+    "smoothstep",
+    "soft_clamp",
     "angle_towards",
     "random_in_rect",
     "random_in_surface",
@@ -388,6 +485,7 @@ __all__ = [
     "bounce",
     "exp_impulse",
     "exp_impulse_integral",
+    "soft_plus",
     "auto_crop",
     "outline",
     "overlay",
@@ -397,7 +495,6 @@ __all__ = [
     "gradient",
     "Cooldown",
 ]
-
 
 # This just helps me to remember to add new utilities to __all__
 for name, f in list(globals().items()):

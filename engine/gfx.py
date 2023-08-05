@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, Literal
 
 import pygame
 import pygame.gfxdraw
 from pygame import Vector2, Rect
+
+from .constants import SMALL_TEXT_SIZE, BIG_TEXT_SIZE
+from .assets import text
 
 if TYPE_CHECKING:
     from pygame._common import ColorValue, RectValue
@@ -83,6 +86,11 @@ class GFX:
             pygame.gfxdraw.aacircle(self.surf, round(pos.x), round(pos.y), round(radius), color)
         else:
             pygame.draw.circle(self.surf, color, pos, radius, width)
+
+    def text(self, color: ColorValue, txt: str, size: int, font_name: str = None, ui: bool = True, **anchor) -> Rect:
+        """Draw text in world coordinates. Supports alpha."""
+        surf = text(txt, size, color, font_name)
+        return self.blit(surf, ui, **anchor)
 
     # For subclasses to manipulate coordinates
 

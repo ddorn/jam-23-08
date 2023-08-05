@@ -256,7 +256,10 @@ class GameState(State):
         #     self.particles.fountains.append(ParticleFountain.screen_confetti(SCREEN))
 
     def draw(self, gfx: CameraGFX):
-        gfx.world_center = self.blob.pos
+        camera_x, camera_y = self.blob.pos
+        # Clamp the camera y between 0m and 1000m, but smoothly
+        camera_y = soft_clamp(camera_y, 0, 1000 * 100, 1000)
+        gfx.world_center = camera_x, camera_y
 
         bg_color = gradient(self.timer / self.FPS,
                             (0, "#3F51B5"),
@@ -271,16 +274,23 @@ class GameState(State):
                             )
         gfx.surf.fill(bg_color)
 
-        s = smooth_breathing(time())
-        s256 = int(s * 255)
+        if self.timer % 5 == 0:
+            self.blob.draw(WrapGFX(self.fog), force_alpha=0.3)
+
+        # If at the surcface, draw the sky
+        if camera_y < H / 2:
+            gfx.rect(WHITE, camera_x - W / 2, -H / 2, W, H / 2)
+
+        super().draw(gfx)
+
+        # Show depth
+        depth = int(-self.blob.pos.y / 100)
+        gfx.text("#FFF176", f"{depth}m", size=120, midbottom=(W / 2, H - 20))
 
         if self.use_fog:
-            if self.timer % 5 == 0:
-                self.blob.draw(WrapGFX(self.fog), force_alpha=0.3)
             self.fog.set_alpha(50)
             gfx.surf.blit(self.fog, (0, 0))
 
-        super().draw(gfx)
 
 
 def main():
