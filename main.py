@@ -1,15 +1,20 @@
+from __future__ import annotations
+
 import math
 import sys
+from random import gauss
 from time import time
 
 import numpy as np
 import pygame.gfxdraw
+from pygame import Rect
 
 sys.path.append("engine")
 from engine import *
 from utility import smooth_breathing
 
 SIZE = W, H = 1600, 1200
+SCREEN = Rect(0, 0, *SIZE)
 PINK = pygame.Color("#E91E63")
 ORANGE = pygame.Color("#F39C12")
 INDIGO = pygame.Color("#3F51B5")
@@ -25,12 +30,13 @@ def fainter(color, multiplier):
         h,
         s,
         l * multiplier + 100 * (1 - multiplier),
-        a * multiplier**2 / 2,
+        a * multiplier ** 2 / 2,
     )
     return color
 
 
 class Blob(Object):
+    Z = 10
 
     def __init__(
             self,
@@ -129,18 +135,28 @@ class Blob(Object):
         if not (0 < self.pos.y < H):
             self.pos.y %= H
 
-
-    def draw(self, gfx: GFX):
+    def draw(self, gfx: GFX, force_alpha: float | None = None):
         super().draw(gfx)
         for point, color, radius, (t, _) in reversed(self.points_to_draw):
+            if force_alpha is not None:
+                multiplier = force_alpha
+            else:
+                multiplier = 1 - (self.time - t) / self.hist_size
             pygame.gfxdraw.filled_circle(
                 gfx.surf,
                 int(point.x),
                 int(point.y),
                 radius,
-                fainter(color, 1 - (self.time - t) / self.hist_size),
+                fainter(color, multiplier),
             )
 
+
+class Fairy(Object):
+    def __init__(self, pos):
+        super().__init__(pos)
+
+    def logic(self):
+        super().logic()
 
 
 class GameState(State):
@@ -165,6 +181,9 @@ class GameState(State):
         ))
         self.use_fog = True
 
+        for i in range(10):
+            self.add(Fairy(random_in_rect(Rect(0, 0, W, H))))
+
     def handle_events(self, events):
         super().handle_events(events)
 
@@ -173,25 +192,31 @@ class GameState(State):
                 if event.key == pygame.K_SPACE:
                     self.use_fog = not self.use_fog
 
+    def logic(self):
+        super().logic()
+
+        if self.timer == 20:
+            self.particles.fountains.append(ParticleFountain.screen_confetti(SCREEN))
+
     def draw(self, gfx: "GFX"):
-        bg_color = WHITE.lerp(DARK, min(self.timer / 1000, 1))
+        bg_color = gradient(self.timer / self.FPS,
+                            (0, "#E1F5FE"),
+                            (5, "#9FA8DA"),
+                            (10, DARK),
+                            (15, BLACK),
+                            (25, (0, 0, 0)),
+                            )
         gfx.surf.fill(bg_color)
 
         super().draw(gfx)
-
-        # r = 100 + smooth_breathing(time() , 5) * 100
-        # r = int(r)
 
         s = smooth_breathing(time())
         s256 = int(s * 255)
 
         if self.use_fog:
-            self.fog.fill(bg_color)
+            self.blob.draw(GFX(self.fog), force_alpha=0.3)
             self.fog.set_alpha(s256)
             gfx.surf.blit(self.fog, (0, 0))
-
-    def logic(self):
-        super().logic()
 
 
 def main():

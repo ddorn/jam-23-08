@@ -1,10 +1,17 @@
+from __future__ import annotations
+
+
+import bisect
 from contextlib import contextmanager
 from functools import lru_cache
 from math import exp
 from random import randrange, uniform
-from typing import Tuple
+from typing import Tuple, TYPE_CHECKING
 
 import pygame
+
+if TYPE_CHECKING:
+    from pygame._common import ColorValue
 
 
 def vec2int(vec):
@@ -210,7 +217,7 @@ def auto_crop(surf: pygame.Surface):
 
 
 def outline(surf: pygame.Surface, color=(255, 255, 255)):
-    """Create an outline on the surface of the biven color."""
+    """Create an outline on the surface of the given color."""
 
     mask = pygame.mask.from_surface(surf)
     outline = mask.outline()
@@ -231,7 +238,7 @@ def outline(surf: pygame.Surface, color=(255, 255, 255)):
 @lru_cache(1000)
 def overlay(image: pygame.Surface, color, alpha=255):
     img = pygame.Surface(image.get_size())
-    img.fill(1)  # 1 is a color unlikely to be used (hopefuly)
+    img.fill(1)  # 1 is a color unlikely to be used (hopefully)
     img.set_colorkey(1)
     img.blit(image, (0, 0))
 
@@ -273,6 +280,52 @@ def random_rainbow_color(saturation=100, value=100):
     color = pygame.Color(0)
     color.hsva = hue, saturation, value, 100
     return color
+
+
+def from_hsv(hue, saturation, value):
+    """
+    Create a color from HSV values. Clamp the values to the correct range.
+
+    Args:
+        hue: The hue of the color, between 0 and 360
+        saturation: The saturation of the color, between 0 and 100
+        value: The value of the color, between 0 and 100
+    """
+
+    hue = hue % 360
+    saturation = max(0, min(100, saturation))
+    value = max(0, min(100, value))
+
+    color = pygame.Color(0)
+    color.hsva = hue, saturation, value, 100
+    return color
+
+def gradient(t: float, *color_spec: tuple[float, ColorValue]) -> pygame.Color:
+    """
+    Return a color that is a linear interpolation between the colors.
+
+    Args:
+        t: The position of the color to return
+        *color_spec: A list of (position, color) pairs. When t is between two positions, the color is interpolated.
+    """
+    assert color_spec, "At least one color must be specified"
+
+    # Sort the colors by position
+    color_spec = sorted(color_spec, key=lambda x: x[0])
+
+    if t <= color_spec[0][0]:
+        return pygame.Color(color_spec[0][1])
+    if t >= color_spec[-1][0]:
+        return pygame.Color(color_spec[-1][1])
+
+    # Find the two colors to interpolate between
+    pos = bisect.bisect(color_spec, t, key=lambda x: x[0])
+    pos1, color1 = color_spec[pos - 1]
+    pos2, color2 = color_spec[pos]
+
+    # Interpolate
+    t = (t - pos1) / (pos2 - pos1)
+    return pygame.Color(color1).lerp(color2, t)
 
 
 class Cooldown:

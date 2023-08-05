@@ -5,7 +5,7 @@ from typing import Callable, Generic, Optional, Tuple, TypeVar, Union
 
 import pygame
 import pygame.gfxdraw as gfx
-from pygame import Vector2
+from pygame import Vector2, Rect
 
 #
 __all__ = [
@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 from .assets import text
-from .utils import bounce, exp_impulse, random_in_rect
+from .utils import bounce, exp_impulse, random_in_rect, random_in_rect_and_avoid
 
 pygame.init()
 
@@ -67,11 +67,11 @@ def rrange(nb: float):
 
 
 def rand2d(vec):
-    return (uniform(0, vec[0]), uniform(0, vec[1]))
+    return uniform(0, vec[0]), uniform(0, vec[1])
 
 
 class ParticleSystem(set):
-    fountains: "List[ParticleFountain]"
+    fountains: "list[ParticleFountain]"
 
     def __init__(self):
         super().__init__()
@@ -129,7 +129,7 @@ class ParticleSystem(set):
 
 class ParticleFountain:
     def __init__(
-        self, particle_generator: Callable[[], "Particle"], frequency=1.0,
+            self, particle_generator: Callable[[], "Particle"], frequency=1.0,
     ):
         self.generator = particle_generator
         self.frequency = frequency
@@ -152,6 +152,26 @@ class ParticleFountain:
             .build(),
             0.2,
         )
+
+    @classmethod
+    def screen_confetti(cls, rect: Rect, n_sources: int = 10):
+        """Spawn confetti covering the screen from n_sources positions."""
+        positions = []
+        for _ in range(n_sources):
+            positions.append(
+                Vector2(random_in_rect_and_avoid(rect, positions, 80))
+            )
+
+        return cls(
+            lambda: CircleParticle()
+            .builder()
+            .hsv(angle := uniform(0, 360), 80, 80)
+            .at(choice(positions) + polar(40, angle), angle + 90)
+            .velocity(gauss(2, 0.2), )
+            .sized(gauss(5, 2))
+            # .acceleration(-0.005)
+            .living(400)
+            .build(), frequency=n_sources)
 
 
 class Particle:
@@ -436,7 +456,7 @@ class PolygonParticle(DrawnParticle):
     def draw(self, surf):
         points = [
             self.pos
-            + polar(self.size, self.inner_rotation + i * 360 / self.vertices * self.vertex_step,)
+            + polar(self.size, self.inner_rotation + i * 360 / self.vertices * self.vertex_step, )
             for i in range(self.vertices)
         ]
 
@@ -539,7 +559,7 @@ class TextParticle(DrawnParticle, ImageParticle):
 
 def main():
     SIZE = (1300, 800)
-    display = pygame.display.set_mode(SIZE,)
+    display = pygame.display.set_mode(SIZE, )
     particles = ParticleSystem()
     clock = pygame.time.Clock()
 
@@ -607,7 +627,7 @@ def main():
         "Sawubona",
         "Ngiyakwemukela",
     ]
-    texts_surfs = [DEFAULT_FONT.render(text, 1, "white") for text in texts]
+    texts_surfs = [DEFAULT_FONT.render(text, True, "white") for text in texts]
 
     def base(y):
         return lambda builder: (
@@ -623,7 +643,7 @@ def main():
         ParticleFountain(
             lambda: PolygonParticle(5, "#00a590", 2).builder().apply(base(50)).build(), 1,
         ),
-        ParticleFountain(lambda: CircleParticle("#c09540").builder().apply(base(150)).build(), 1,),
+        ParticleFountain(lambda: CircleParticle("#c09540").builder().apply(base(150)).build(), 1, ),
         ParticleFountain(
             lambda: PolygonParticle(6, "#a400a5").builder().apply(base(250)).build(), 1,
         ),
