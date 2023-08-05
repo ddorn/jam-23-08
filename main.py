@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from random import gauss, random, randrange
+from random import gauss, random, randrange, uniform
 from time import time
 
 import numpy as np
@@ -213,14 +213,14 @@ class GameState(State):
         self.blob = self.add(Blob(
             0,
             0,
-        10,
-        6,
-        6,
-        True,
-        acceleration = 3,
-        friction = 0.8,
-        hist_size = 10,
-        max_hist_size = 50,
+            10,
+            6,
+            6,
+            True,
+            acceleration=3,
+            friction=0.8,
+            hist_size=10,
+            max_hist_size=50,
         ))
         self.use_fog = True
         self.debug.toggle()
@@ -280,6 +280,11 @@ class GameState(State):
         # If at the surcface, draw the sky
         if camera_y < H / 2:
             gfx.rect(WHITE, camera_x - W / 2, -H / 2, W, H / 2)
+            # Generate waves particles
+            self.generate_waves_particles(0, bg_color.hsva[0])
+        if camera_y > 1000 * 100 - H / 2:
+            gfx.rect(BLACK, camera_x - W / 2, 1000 * 100, W, H / 2)
+            self.generate_waves_particles(1000 * 100, bg_color.hsva[0])
 
         super().draw(gfx)
 
@@ -291,6 +296,21 @@ class GameState(State):
             self.fog.set_alpha(50)
             gfx.surf.blit(self.fog, (0, 0))
 
+    def generate_waves_particles(self, y: float, hue: float):
+        n_particles = 20
+        for i in range(n_particles):
+            x = uniform(-W / 2, W / 2) + self.blob.pos.x
+            self.particles.add(
+                CircleParticle("#ffffff")
+                .builder()
+                .hsv(gauss(hue, 10), gauss(0.2, 0.05), 0.95)
+                .sized(gauss(10, 2))
+                .anim_fade()
+                .at((x, y), gauss(-90, 15))
+                .velocity(gauss(1, 0.5))
+                .constant_force((0, 1))
+                .build()
+            )
 
 
 def main():
