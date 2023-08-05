@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import sys
+import math
+from functools import cache
 from random import gauss, uniform
 from time import time
 
 import numpy as np
 import pygame.gfxdraw
 from pygame import Rect
-import math
 
 from engine import *
+from engine.particles import rrange
 from utility import smooth_breathing
 
 PINK = pygame.Color("#E91E63")
@@ -45,6 +46,7 @@ class Blob(Object):
             controllable=False,
             hue_range: tuple[int, int] | None = None,
             hist_size: int = 50,
+            max_hist_size: int = 100,
             acceleration: float = 5,
             friction: float = 0.8,
     ):
@@ -66,6 +68,7 @@ class Blob(Object):
         self.controllable = controllable
 
         self.hist_size = hist_size
+        self.max_hist_size = max_hist_size
         self.points_to_draw = []
 
     def color(self, point_index: int):
@@ -120,7 +123,7 @@ class Blob(Object):
         for (p1, color, radius), (p2, _, _) in zip(last_points, self.mk_points()):
             dist = p1.distance_to(p2)
             direction = (p2 - p1).normalize()
-            for j in range(0, int(dist), max(1, radius // 3)):
+            for j in range(0, int(dist), max(3, radius // 3)):
                 point = p1 + direction * j
                 self.points_to_draw.append((point, color, radius, (self.time, j)))
 
@@ -133,16 +136,23 @@ class Blob(Object):
         for fairy in self.state.get_all(Fairy):
             if fairy.pos.distance_to(self.pos) < fairy.radius + self.radius + self.part_radius:
                 fairy.alive = False
-                self.hist_size = min(100, self.hist_size + 3)
+                self.hist_size += 3
                 for i in range(self.n_points):
                     color = self.color(i)
                     angle = color.hsva[0]
                     self.state.particles.add(
                         ShardParticle(color)
                         .builder()
-                        .at(self.center, angle)
+                        .at(self.center + from_polar(self.radius, angle), angle)
+                        .velocity(8, 1)
+                        .anim_fade(0.2)
                         .build()
                     )
+
+                for _ in rrange(1.5):
+                    self.state.add(Fairy(random_in_rect(SCREEN.move(self.pos - (W/2, H/2)))))
+
+        self.hist_size = min(self.hist_size, self.max_hist_size)
 
     def draw(self, gfx: GFX, force_alpha: float | None = None):
         super().draw(gfx)
@@ -152,7 +162,19 @@ class Blob(Object):
             else:
                 multiplier = 1 - (self.time - t) / self.hist_size
 
+            # circle = self.get_circle(int(radius), tuple(color))
+            # circle.set_alpha(int(255 * multiplier))
+            # gfx.blit(circle, center=point)
             gfx.circle(fainter(color, multiplier), point, radius)
+
+    @staticmethod
+    @cache
+    def get_circle(radius: int, color: pygame.Color) -> pygame.Surface:
+        size = 2 * radius + 1
+        img = pygame.Surface((size, size), pygame.SRCCOLORKEY | pygame.RLEACCEL)
+        img.set_colorkey((0, 0, 0))
+        pygame.draw.circle(img, color, (radius, radius), radius)
+        return img
 
 
 class Fairy(SpriteObject):
@@ -185,7 +207,7 @@ class Fairy(SpriteObject):
 
 class GameState(State):
     BG_COLOR = None
-    FPS = 60
+    FPS = 1000
 
     def __init__(self):
         super().__init__()
@@ -202,8 +224,10 @@ class GameState(State):
             acceleration=3,
             friction=0.8,
             hist_size=10,
+            max_hist_size=50,
         ))
-        self.use_fog = False
+        self.use_fog = True
+        self.debug.toggle()
 
         for i in range(10):
             self.add(Fairy(random_in_rect(Rect(0, 0, W, H))))
@@ -215,6 +239,8 @@ class GameState(State):
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     self.use_fog = not self.use_fog
+                elif event.key == pygame.K_f:
+                    self.FPS = 1000 if self.FPS == 60 else 60
 
     def logic(self):
         super().logic()
@@ -238,16 +264,17 @@ class GameState(State):
                             )
         gfx.surf.fill(bg_color)
 
-        super().draw(gfx)
 
         s = smooth_breathing(time())
         s256 = int(s * 255)
 
         if self.use_fog:
-            self.blob.draw(WrapGFX(self.fog), force_alpha=0.3)
-            self.fog.set_alpha(s256)
+            if self.timer % 5 == 0:
+                self.blob.draw(WrapGFX(self.fog), force_alpha=0.3)
+            self.fog.set_alpha(50)
             gfx.surf.blit(self.fog, (0, 0))
 
+        super().draw(gfx)
 
 def main():
     App(GameState, FixedScreen(SIZE), CameraGFX).run()

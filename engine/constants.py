@@ -3,7 +3,7 @@ from pathlib import Path
 import pygame
 
 GAME_NAME = "XXX"
-SIZE = 1600, 800
+SIZE = 1600, 1200
 W, H = SIZE
 USE_DELTA_TIME = False
 
