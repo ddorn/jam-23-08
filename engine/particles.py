@@ -21,9 +21,9 @@ __all__ = [
     "ShardParticle",
 ]
 
-from engine.assets import text
-from engine.utils import bounce, exp_impulse, random_in_rect, random_in_rect_and_avoid, rrange, clamp, from_polar
-from engine.gfx import GFX
+from .assets import text
+from .utils import bounce, exp_impulse, random_in_rect, random_in_rect_and_avoid, rrange, clamp, from_polar
+from .gfx import GFX
 
 pygame.init()
 

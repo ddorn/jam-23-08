@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import math
 from random import gauss, random, randrange, uniform
-from time import time
 
 import numpy as np
 import pygame.gfxdraw
 from pygame import Rect
 
 from engine import *
-from utility import smooth_breathing
 
 PINK = pygame.Color("#E91E63")
 ORANGE = pygame.Color("#F39C12")
@@ -17,6 +15,13 @@ INDIGO = pygame.Color("#3F51B5")
 DARK = pygame.Color("#2C3E50")
 WHITE = pygame.Color("#ECF0F1")
 BLACK = pygame.Color("#212121")
+
+Y_TO_METERS = 1 / 100
+METERS_TO_Y = 100
+# Y of the surface
+SURFACE = 0
+# Y of the other side
+OTHER_SIDE = 100 * METERS_TO_Y
 
 
 def fainter(color, multiplier):
@@ -101,6 +106,7 @@ class Blob(Object):
         self.time += 1
         alpha = 0.02
 
+        # Add some randomness to the points
         self.point_dist = alpha + (1 - alpha) * (self.point_dist +
                                                  np.random.normal(0, self.std, self.radius))
         self.point_angle_shift = (1 - alpha) * (self.point_angle_shift +
@@ -109,13 +115,20 @@ class Blob(Object):
                                                    np.random.normal(0, self.std * 2, self.radius))
 
         # Move
-        if self.controllable:
-            keys = pygame.key.get_pressed()
-            self.vel.x += (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * self.acceleration
-            self.vel.y += (keys[pygame.K_DOWN] - keys[pygame.K_UP]) * self.acceleration
+        if self.pos.y < SURFACE - 20:
+            self.vel.y += 0.1
+            self.vel *= 0.99
+        elif self.pos.y > OTHER_SIDE:
+            self.vel.y -= 0.1
+            self.vel *= 0.99
+        else:
+            if self.controllable:
+                keys = pygame.key.get_pressed()
+                self.vel.x += (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * self.acceleration
+                self.vel.y += (keys[pygame.K_DOWN] - keys[pygame.K_UP]) * self.acceleration
             self.vel *= self.friction
 
-            self.pos.y += 5
+        self.pos.y += 5
 
         # Add enough circle between the last and the current position that it appears a smooth line
         for (p1, color, radius), (p2, _, _) in zip(last_points, self.mk_points()):
@@ -277,14 +290,13 @@ class GameState(State):
         if self.timer % 5 == 0:
             self.blob.draw(WrapGFX(self.fog), force_alpha=0.3)
 
-        # If at the surcface, draw the sky
-        if camera_y < H / 2:
-            gfx.rect(WHITE, camera_x - W / 2, -H / 2, W, H / 2)
-            # Generate waves particles
-            self.generate_waves_particles(0, bg_color.hsva[0])
-        if camera_y > 1000 * 100 - H / 2:
-            gfx.rect(BLACK, camera_x - W / 2, 1000 * 100, W, H / 2)
-            self.generate_waves_particles(1000 * 100, bg_color.hsva[0])
+        # If at the surface, draw the sky
+        if camera_y < SURFACE + H:
+            gfx.rect(WHITE,  camera_x, SURFACE, W, H, anchor='midbottom')
+            self.generate_waves_particles(SURFACE, bg_color.hsva[0])
+        if camera_y > OTHER_SIDE - H:
+            gfx.rect(BLACK, camera_x, OTHER_SIDE, W, H, anchor='midtop')
+            self.generate_waves_particles(OTHER_SIDE, bg_color.hsva[0])
 
         super().draw(gfx)
 

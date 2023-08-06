@@ -1,12 +1,11 @@
-from random import gauss
 from typing import Optional, Tuple, TYPE_CHECKING, Generator
 
 import pygame
 
-from .gfx import GFX
-from .assets import font, rotate
+from .assets import rotate
 from .constants import GREEN, RED, UPWARDS
-from .particles import ImageParticle, TextParticle
+from .gfx import GFX
+from .particles import TextParticle
 from .utils import overlay, random_in_rect, random_rainbow_color
 
 if TYPE_CHECKING:
@@ -89,7 +88,7 @@ class Object(Scriptable):
         self.alive = True
         self.state: Optional["State"] = None
 
-        # A somewhat unique color per object, that can be used for debugging
+        # A (likely) unique color per object, that can be used for debugging
         self._random_color = random_rainbow_color(80)
 
         self.add_script(self.script())

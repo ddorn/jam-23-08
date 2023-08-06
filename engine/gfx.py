@@ -218,6 +218,10 @@ class GFX:
 
     '''
 
+    def fill(self, color: ColorValue):
+        """Fill the surface with a color. Alpha not supported."""
+        self.surf.fill(color)
+
 
 class CameraGFX(GFX):
 

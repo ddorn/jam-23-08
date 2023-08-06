@@ -1,25 +1,28 @@
 from enum import Enum
 from random import randint
-from typing import List, Optional, Tuple, Type, TypeVar, Union
+from typing import List, Optional, Tuple, Type, TypeVar, Union, TYPE_CHECKING
 
-import pygame
 from pygame.locals import *
 
 from .assets import play
 from .constants import *
 from .debug import Debug
+from .gfx import GFX
+from .object import Scriptable
 from .particles import ParticleSystem
 from .pygame_input import Button, Inputs, JoyButton, QuitEvent
 from .settings import settings
-from .utils import mix
-from .object import Scriptable
 
-T = TypeVar("T")
+if TYPE_CHECKING:
+    from .object import Object
+
+TObject = TypeVar("TObject", bound='Object')
 
 __all__ = ["State", "StateMachine", "StateOperations"]
 
 
 class StateOperations(Enum):
+    """Operations that can be performed on a state stack."""
     NOP = 0
     POP = 1
     PUSH = 2
@@ -88,6 +91,7 @@ class State(Scriptable):
     # Life phase of state
 
     def on_resume(self):
+        """Called when the state is about to become the current state."""
         self.inputs = self.create_inputs()
         self.next_state = (StateOperations.NOP, None)
         self.debug.paused = False
@@ -97,8 +101,11 @@ class State(Scriptable):
             pygame.mixer.music.play(-1)
 
     def on_exit(self):
+        """Called when the state is about to not be the current state anymore.
+        It can have been popped, replaced or another state was pushed."""
         self.debug.paused = True
 
+    # noinspection PyMethodMayBeStatic
     def script(self):
         """Script must be a generator where each yield will correspond to a frame.
 
@@ -109,7 +116,7 @@ class State(Scriptable):
     def logic(self):
         """All the logic of the state happens here.
 
-        To change to an other state, you need to call any of:
+        To change to another state, you need to call any of:
             - self.pop_state()
             - self.push_state(new)
             - self.replace_state(new)
@@ -140,7 +147,8 @@ class State(Scriptable):
                 object.on_death()
         self.objects.difference_update(to_remove)
 
-    def draw(self, gfx: "GFX"):
+    def draw(self, gfx: GFX):
+        """Draw the state and all its objects."""
         if self.BG_COLOR:
             gfx.fill(self.BG_COLOR)
 
@@ -163,33 +171,35 @@ class State(Scriptable):
             self.shake -= 1
 
     def handle_events(self, events):
+        """Handle events for the state."""
         self.inputs.trigger(events)
 
     def resize(self, old, new):
+        """Called when the window is resized from old to new."""
         for obj in self.objects:
             obj.resize(old, new)
 
     # State modifications
 
-    def add(self, object: T) -> T:
+    def add(self, obj: TObject) -> TObject:
         """Add an object to the state.
 
-        Note that is is only added at the begining of the next frame.
-        This allows to add objects while modifying the list.
+        Note that is only added at the beginning of the next frame.
+        This allows to add objects while modifying/iterating over the objects.
 
         Returns:
-            The argument is returned , to allow creating,
+            The argument is returned, to allow creating,
             adding and storing it in a variable in the same line.
         """
 
         if self.add_object_lock:
-            self.add_later.append(object)
+            self.add_later.append(obj)
         else:
-            self.objects.add(object)
+            self.objects.add(obj)
 
-        object.state = self
+        obj.state = self
 
-        return object
+        return obj
 
     def get_all(self, *types):
         """Get all objects in the State with the given types.
@@ -206,6 +216,7 @@ class State(Scriptable):
                     break
 
     def do_shake(self, frames):
+        """Shake the screen for the given number of frames."""
         assert frames >= 0
         self.shake += frames
 
@@ -230,17 +241,19 @@ class State(Scriptable):
         self.next_state = (StateOperations.PUSH, new)
 
     def replace_state(self, new: "State"):
-        """Replace the current state with an other one. Equivalent of a theoric pop then push."""
+        """Replace the current state with another one. Equivalent of a theoretic pop then push."""
         self.next_state = (StateOperations.REPLACE, new)
 
     def push_state_callback(self, new: Type["State"], *args):
         def callback(*_):
+            # noinspection PyArgumentList
             self.next_state = (StateOperations.PUSH, new(*args))
 
         return callback
 
     def replace_state_callback(self, new: Type["State"], *args):
         def callback(*_):
+            # noinspection PyArgumentList
             self.next_state = (StateOperations.REPLACE, new(*args))
 
         return callback
@@ -254,6 +267,7 @@ class StateMachine:
 
     @property
     def running(self):
+        """Whether the state machine is non-empty."""
         return len(self.stack) > 0
 
     @property
