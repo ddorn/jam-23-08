@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import math
-from random import gauss, random, randrange, uniform
+from random import gauss, random, randrange, uniform, choice, expovariate
 
 import numpy as np
 import pygame.gfxdraw
-from pygame import Rect
+from pygame import Rect, Vector2
 
 from engine import *
 
@@ -102,6 +102,7 @@ class Blob(Object):
 
     def logic(self):
         last_points = self.mk_points()
+        last_pos = self.pos.copy()
         super().logic()
         self.time += 1
         alpha = 0.02
@@ -115,11 +116,15 @@ class Blob(Object):
                                                    np.random.normal(0, self.std * 2, self.radius))
 
         # Move
-        if self.pos.y < SURFACE - 20:
-            self.vel.y += 0.1
+        if self.pos.x < (SURFACE + OTHER_SIDE) / 2:
+            m = chrange(self.pos.y, (SURFACE, SURFACE + 800), (1, 4))
+        else:
+            m = chrange(self.pos.y, (OTHER_SIDE - 800, OTHER_SIDE), (4, -1))
+        gravity = 0.3 * soft_clamp(m, 1, 4, 1)
+        self.vel.y += gravity
+        if self.pos.y < SURFACE:
             self.vel *= 0.99
         elif self.pos.y > OTHER_SIDE:
-            self.vel.y -= 0.1
             self.vel *= 0.99
         else:
             if self.controllable:
@@ -128,7 +133,8 @@ class Blob(Object):
                 self.vel.y += (keys[pygame.K_DOWN] - keys[pygame.K_UP]) * self.acceleration
             self.vel *= self.friction
 
-        self.pos.y += 5
+        # If entering/exiting water, make a splash
+        self.make_splash(last_pos)
 
         # Add enough circle between the last and the current position that it appears a smooth line
         for (p1, color, radius), (p2, _, _) in zip(last_points, self.mk_points()):
@@ -166,7 +172,6 @@ class Blob(Object):
                     self.state.add(Fairy(random_in_rect(SCREEN.move(self.pos - (W / 2, H / 2)))))
 
         self.hist_size = min(self.hist_size, self.max_hist_size)
-        self.state.debug.text(self.pos)
 
     def add_speed_buff(self, angle: float):
         @self.add_script_decorator
@@ -174,6 +179,54 @@ class Blob(Object):
             for _ in range(10):
                 self.vel = from_polar(30, angle)
                 yield
+
+    def make_splash(self, last_pos: pygame.Vector2):
+        mini = min(self.pos.y, last_pos.y)
+        maxi = max(self.pos.y, last_pos.y)
+        if mini < SURFACE < maxi:
+            y = SURFACE
+        elif mini < OTHER_SIDE < maxi:
+            y = OTHER_SIDE
+        else:
+            return
+
+        if self.vel.y < 0:
+            m = 1
+            pull = self.vel / 5
+        else:
+            m = -1
+            pull = (0, 0.1)
+
+        angle = self.vel.as_polar()[1] + 180 * (self.vel.y > 0)
+
+        strength = self.vel.length() * 5
+        self.state.debug.text(f"strength: {strength}")
+        # color = self.state.bg_color()
+        color= self.color(0)
+
+        impact_pos = Vector2(self.center.x, y)
+
+        @self.add_script_decorator
+        def _():
+            for frame in range(1, 3):
+                yield
+                for _ in rrange(strength):
+                    self.state.particles.add(
+                        CircleParticle(color)
+                        .builder()
+                        .sized(size := gauss(10, 2))
+                        .at(impact_pos + (gauss(0, 10), 0), gauss(angle, 30))
+                        .constant_force(pull)
+                        .living(30)
+                        # .velocity(gauss(2, 0.4))
+                        .velocity(expovariate(0.7))
+                        # .acceleration(-0.1)
+                        .anim_gravity(0.05)
+                        .anim_fade(0.2)
+                        .build()
+                    )
+
+
 
     def draw(self, gfx: GFX, force_alpha: float | None = None):
         super().draw(gfx)
@@ -199,8 +252,7 @@ class Fairy(SpriteObject):
             x = gauss(40, 6)
             y = gauss(40, 6)
             radius = max(2.0, gauss(5, 2))
-            color = from_hsv(gauss(self.hue, 10), 70, 90)
-            pygame.draw.circle(self.image, color, (x, y), radius)
+            pygame.draw.circle(self.image, self.color(), (x, y), radius)
 
             # Fade out the image
             self.image.fill((0, 0, 0, 1), None, pygame.BLEND_RGBA_SUB)
@@ -210,8 +262,24 @@ class Fairy(SpriteObject):
 
         self.pos.y += 0
 
+        # self.state.particles.add(
+        #     CircleParticle(self.color())
+        #     .builder()
+        #     .at(self.center + from_polar(gauss(self.radius / 3), uniform(0, 360)), gauss(self.hue, 10))
+        #     .sized(5)
+        #     .anim_fade()
+        #     .build()
+        # )
+
+    def color(self, alpha: int = 100):
+        return from_hsv(gauss(self.hue, 10), 70, 90, alpha)
+
     def draw(self, gfx: "GFX"):
         super().draw(gfx)
+
+        # gfx.circle(self.color(10), self.center, self.radius)
+        # gfx.circle(self.color(20), self.center, self.radius / 2)
+        # gfx.circle(self.color(40), self.center, self.radius / 4)
 
 
 class GameState(State):
@@ -224,7 +292,7 @@ class GameState(State):
         self.fog.fill(WHITE)
 
         self.blob = self.add(Blob(
-            0,
+            W / 2,
             0,
             10,
             6,
@@ -268,35 +336,39 @@ class GameState(State):
         # if self.timer == 20 * self.FPS:
         #     self.particles.fountains.append(ParticleFountain.screen_confetti(SCREEN))
 
+    def bg_color(self):
+        colors = [
+            (0, "#3F51B5"),
+            # (5, "#311B92"),
+            (10, DARK),
+            (15, BLACK),
+            (25, (0, 0, 0)),
+            (30, "#430727"),
+            (35, "#601B06"),
+            (40, "#2E2B08"),
+            (45, "#002620"),
+
+        ]
+        return gradient(self.timer / self.FPS, *colors)
+
     def draw(self, gfx: CameraGFX):
         camera_x, camera_y = self.blob.pos
         # Clamp the camera y between 0m and 1000m, but smoothly
-        camera_y = soft_clamp(camera_y, 0, 1000 * 100, 1000)
+        camera_y = soft_clamp(camera_y, SURFACE, OTHER_SIDE, 1000)
         gfx.world_center = camera_x, camera_y
 
-        bg_color = gradient(self.timer / self.FPS,
-                            (0, "#3F51B5"),
-                            # (5, "#311B92"),
-                            (10, DARK),
-                            (15, BLACK),
-                            (25, (0, 0, 0)),
-                            (30, "#430727"),
-                            (35, "#601B06"),
-                            (40, "#2E2B08"),
-                            (45, "#002620"),
-                            )
-        gfx.surf.fill(bg_color)
+        gfx.surf.fill(self.bg_color())
 
         if self.timer % 5 == 0:
             self.blob.draw(WrapGFX(self.fog), force_alpha=0.3)
 
         # If at the surface, draw the sky
         if camera_y < SURFACE + H:
-            gfx.rect(WHITE,  camera_x, SURFACE, W, H, anchor='midbottom')
-            self.generate_waves_particles(SURFACE, bg_color.hsva[0])
+            gfx.rect(WHITE, camera_x, SURFACE, W, H, anchor='midbottom')
+            self.generate_waves_particles(SURFACE)
         if camera_y > OTHER_SIDE - H:
             gfx.rect(BLACK, camera_x, OTHER_SIDE, W, H, anchor='midtop')
-            self.generate_waves_particles(OTHER_SIDE, bg_color.hsva[0])
+            self.generate_waves_particles(OTHER_SIDE)
 
         super().draw(gfx)
 
@@ -308,14 +380,18 @@ class GameState(State):
             self.fog.set_alpha(50)
             gfx.surf.blit(self.fog, (0, 0))
 
-    def generate_waves_particles(self, y: float, hue: float):
+    def generate_waves_particles(self, y: float):
+        hue, sat, val, _alpha = self.bg_color().hsva
         n_particles = 20
         for i in range(n_particles):
             x = uniform(-W / 2, W / 2) + self.blob.pos.x
             self.particles.add(
                 CircleParticle("#ffffff")
                 .builder()
-                .hsv(gauss(hue, 10), gauss(0.2, 0.05), 0.95)
+                .hsv(
+                    gauss(hue, 10),
+                    gauss(0.2, 0.05),
+                    0.95)
                 .sized(gauss(10, 2))
                 .anim_fade()
                 .at((x, y), gauss(-90, 15))

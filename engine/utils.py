@@ -5,7 +5,6 @@ import contextlib
 import functools
 import math
 import random
-import types
 import typing
 
 import pygame
@@ -29,6 +28,11 @@ def load_img(path, alpha=False):
 @functools.lru_cache()
 def get_tile(tilesheet: pygame.Surface, size, x, y, w=1, h=1):
     return tilesheet.subsurface(x * size, y * size, w * size, h * size)
+
+
+def lerp(a, b, t):
+    """Linear interpolation between a and b. Return a when t=0 and b when t=1."""
+    return (1 - t) * a + t * b
 
 
 def mix(color1, color2, t):
@@ -193,7 +197,7 @@ def random_in_surface(surf: pygame.Surface, max_retries=100):
             if not (color == color_key or color[3] == 0):
                 # Pixel is not transparent.
                 return pos
-        return (w // 2, h // 2)
+        return w // 2, h // 2
 
 
 @contextlib.contextmanager
@@ -324,11 +328,11 @@ def outline(surf: pygame.Surface, color=(255, 255, 255)):
     """Create an outline on the surface of the given color."""
 
     mask = pygame.mask.from_surface(surf)
-    outline = mask.outline()
+    outline_points = mask.outline()
     output = pygame.Surface((surf.get_width() + 2, surf.get_height() + 2))
 
     with lock(output):
-        for x, y in outline:
+        for x, y in outline_points:
             for dx, dy in ((0, 1), (1, 0), (-1, 0), (0, -1)):
                 output.set_at((x + dx + 1, y + dy + 1), color)
 
@@ -468,6 +472,7 @@ __all__ = [
     "vec2int",
     "load_img",
     "get_tile",
+    "lerp",
     "mix",
     "chrange",
     "rrange",

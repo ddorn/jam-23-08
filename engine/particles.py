@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from math import cos, pi, sin
 from random import choice, gauss, randint, random, uniform
 from time import time
@@ -172,6 +174,7 @@ class Particle:
         self.inner_rotation = 0
         self.inner_rotation_speed = 0
         self.alpha = 255
+        self.custom_func = None
 
         self.life_prop = 0.0
         self.alive = True
@@ -211,7 +214,7 @@ class Particle:
             return self
 
         def constant_force(self, velocity: Vector2):
-            """Add the given velocity to the particle's postion every frame."""
+            """Add the given velocity to the particle's position every frame."""
 
             self._p.constant_force = velocity
             return self
@@ -250,6 +253,18 @@ class Particle:
                 particle.alpha = alpha
 
             return self.anim(fade)
+
+        def anim_gravity(self, gravity: float | Vector2):
+            """Add gravity to the particle."""
+            if isinstance(gravity, (int, float)):
+                gravity = Vector2(0, gravity)
+
+            def gravity_anim(particle: Particle):
+                vel = from_polar(particle.speed, particle.angle)
+                vel += gravity
+                particle.speed, particle.angle = vel.as_polar()
+
+            return self.anim(gravity_anim)
 
         def anim_blink(self, up_duration=0.5, pow=2):
             def blink(particle):
