@@ -26,6 +26,7 @@ class App(StateMachine):
     NAME = GAME_NAME
     MAIN_APP: "App" = None
     MOUSE_VISIBLE = True
+    USE_FPS_TITLE = False
 
     def __init__(self, initial_state: Type[State], resizing: Screen, gfx_class: Type[GFX] = GFX):
         App.MAIN_APP = self
@@ -53,6 +54,8 @@ class App(StateMachine):
 
             pygame.display.update()
             self.clock.tick(self.state.FPS)
+            if self.USE_FPS_TITLE:
+                pygame.display.set_caption(f"{self.NAME} - {self.clock.get_fps():.1f} FPS")
 
             frame += 1
             self.state = self.state.next_state

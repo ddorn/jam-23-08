@@ -66,9 +66,6 @@ class State(Scriptable):
         inputs["quit"] = Button(QuitEvent(), K_ESCAPE, K_q, JoyButton(JOY_BACK))
         inputs["quit"].on_press(self.pop_state)
 
-        inputs["debug"] = Button(K_F11, JoyButton(10))
-        inputs["debug"].on_press(self.debug.toggle)
-
         inputs["mute"] = Button(K_m, JoyButton(11))
         inputs["mute"].on_press(self.toggle_mute)
 

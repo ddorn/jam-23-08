@@ -1,8 +1,8 @@
-from time import time
+from time import time, sleep
 
-from pygame import Vector2
+from pygame import Vector2, K_F11, K_MINUS
 
-from .assets import *
+from .pygame_input import Button, JoyButton
 from .constants import *
 from .object import Object
 
@@ -43,11 +43,21 @@ class Debug(Object):
 
         self.enabled = False
         self.paused = False
+        self.slow_motion = False
 
         self.frame_times = [0]
 
     def logic(self):
         self.frame_times = self.frame_times[-29:] + [time()]
+
+        if self.enabled and self.slow_motion:
+            sleep(0.1)
+
+    def create_inputs(self):
+        return {
+            "toggle-debug": Button(K_F11, JoyButton(10)).on_press(self.toggle),
+            "slow-motion": Button(K_MINUS).on_press(self.toggle_slow_motion),
+        }
 
     def toggle(self, *_args):
         """Toggle between enabled and disabled.
@@ -55,6 +65,10 @@ class Debug(Object):
         If the debug is disabled, nothing is drawn on screen.
         """
         self.enabled = not self.enabled
+
+    def toggle_slow_motion(self, *_args):
+        """Reduce the game speed to 6 FPS."""
+        self.slow_motion = not self.slow_motion
 
     def point(self, x, y, color="red"):
         """Draw a point during the draw phase."""

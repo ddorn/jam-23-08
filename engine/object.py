@@ -75,7 +75,7 @@ class Scriptable:
 
 
 class Object(Scriptable):
-    """Base class for everythink in the game world."""
+    """Base class for everything in the game world."""
 
     Z = 0  # Z-Index to determine in which order to draw objects.
 
@@ -132,7 +132,7 @@ class Object(Scriptable):
         self.state.debug.rectangle(self.rect, self._random_color)
         self.state.debug.vector(self.vel * 10, self.center, self._random_color)
 
-    def draw(self, gfx: "GFX"):
+    def draw(self, gfx: GFX):
         """Override this to draw the object on the screen every frame."""
 
     def on_death(self):

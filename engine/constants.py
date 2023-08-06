@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pygame
+import typing
 
 GAME_NAME = "XXX"
 SIZE = 1600, 1200
@@ -51,3 +52,7 @@ JOY_RT = 5
 
 # For sfx
 VOLUMES = {"shoot": 0.3, "denied": 0.8, "hit": 0.9}
+
+
+# Type aliases
+Vec2Like = typing.Union[tuple[float, float], pygame.Vector2]

@@ -30,9 +30,45 @@ def get_tile(tilesheet: pygame.Surface, size, x, y, w=1, h=1):
     return tilesheet.subsurface(x * size, y * size, w * size, h * size)
 
 
-def lerp(a, b, t):
+def lerp(a, b, t, clamp: bool = False):
     """Linear interpolation between a and b. Return a when t=0 and b when t=1."""
+    if clamp:
+        t = min(1, max(0, t))
     return (1 - t) * a + t * b
+
+
+def lerp_multi(t: float, *points: tuple[float, float]) -> float:
+    """
+    Linear interpolation between multiple points. Return the first point when t=0 and the last point when t=1.
+
+    Args:
+        t: The interpolation factor.
+        points: The points to interpolate between. Must be sorted by time.
+            Each point is a tuple (x, y) where x is the time and y is the value at that time.
+    """
+    for (t1, y1), (t2, y2) in zip(points, points[1:]):
+        if t1 <= t <= t2:
+            # We inline everything for perfs (no call to chrange)
+            prop = (t - t1) / (t2 - t1)
+            return (1 - prop) * y1 + prop * y2
+
+    # This check is after the for loop, as it is the least likely to happen.
+    # When this function is called in particles update, we want the fastest path
+    # to be the one above
+    if t <= 0:
+        return points[0][1]
+    if t >= 1:
+        return points[-1][1]
+    if len(points) == 1:
+        return points[0][1]
+
+    # Should never happen.
+    # Are points not sorted? -> raise an error
+    for (t1, y1), (t2, y2) in zip(points, points[1:]):
+        if t1 > t2:
+            raise ValueError(f"Points are not sorted: {points}")
+    raise ValueError(f"Uh? t={t}, points={points}")
+
 
 
 def mix(color1, color2, t):
@@ -51,11 +87,15 @@ def chrange(
         target_range: tuple[float, float],
         power=1,
         flipped=False,
+        clamp=False,
 ):
     """Change the range of a number by mapping the initial_range to target_range using a linear transformation."""
     normalised = (x - initial_range[0]) / (initial_range[1] - initial_range[0])
     if flipped:
         normalised = 1 - normalised
+    if clamp:
+        normalised = min(1.0, max(0.0, normalised))
+
     normalised **= power
     return normalised * (target_range[1] - target_range[0]) + target_range[0]
 
@@ -473,6 +513,7 @@ __all__ = [
     "load_img",
     "get_tile",
     "lerp",
+    "lerp_multi",
     "mix",
     "chrange",
     "rrange",

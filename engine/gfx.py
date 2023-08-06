@@ -6,7 +6,7 @@ import pygame
 import pygame.gfxdraw
 from pygame import Vector2, Rect
 
-from .constants import SMALL_TEXT_SIZE, BIG_TEXT_SIZE
+from .constants import SMALL_TEXT_SIZE, BIG_TEXT_SIZE, Vec2Like
 from .assets import text
 
 if TYPE_CHECKING:
@@ -28,8 +28,6 @@ __all__ = ["GFX", "WrapGFX", "CameraGFX"]
 # but eventually I'll figure all this out.
 #
 # For now, just think of GFX as a wrapper around pygame.Surface with a better .blit() method.
-
-Vec2Like = Union[tuple[int, int], Vector2]
 
 class GFX:
     def __init__(self, surf: pygame.Surface):
@@ -75,17 +73,16 @@ class GFX:
         else:
             pygame.gfxdraw.aapolygon(self.surf, points, color)
 
-
     def circle(self, color: ColorValue, pos: Vec2Like, radius: float, width: int = 0, ui: bool = False):
         """Draw a circle in world coordinates. Supports alpha for width = 0 or 1."""
-        pos = self.edit_pos(pos, ui)
+        x, y = self.edit_pos(pos, ui)
 
-        if width == 0:
-            pygame.gfxdraw.filled_circle(self.surf, round(pos.x), round(pos.y), round(radius), color)
+        if width == 0 and len(color) == 4 and color[3] < 255:
+            pygame.gfxdraw.filled_circle(self.surf, round(x), round(y), round(radius), color)
         elif width == 1:
-            pygame.gfxdraw.aacircle(self.surf, round(pos.x), round(pos.y), round(radius), color)
+            pygame.gfxdraw.aacircle(self.surf, round(x), round(y), round(radius), color)
         else:
-            pygame.draw.circle(self.surf, color, pos, radius, width)
+            pygame.draw.circle(self.surf, color, (x, y), radius, width)
 
     def text(self, color: ColorValue, txt: str, size: int, font_name: str = None, ui: bool = True, **anchor) -> Rect:
         """Draw text in world coordinates. Supports alpha."""

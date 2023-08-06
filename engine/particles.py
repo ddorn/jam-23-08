@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from math import cos, pi, sin
-from random import choice, gauss, randint, random, uniform
+from random import choice, gauss, randint, uniform
 from time import time
-from typing import Callable, Generic, Optional, Tuple, TypeVar, Union
+from typing import Callable, Generic, Optional, Tuple, TypeVar, Union, Self
 
 import pygame
 import pygame.gfxdraw
@@ -21,6 +21,7 @@ __all__ = [
     "LineParticle",
     "SquareParticle",
     "ShardParticle",
+    "TextParticle",
 ]
 
 from .assets import text
@@ -174,7 +175,6 @@ class Particle:
         self.inner_rotation = 0
         self.inner_rotation_speed = 0
         self.alpha = 255
-        self.custom_func = None
 
         self.life_prop = 0.0
         self.alive = True
@@ -240,21 +240,38 @@ class Particle:
             self._p.lifespan = lifespan
             return self
 
-        def anim(self, animation: Callable[[P], None]):
+        def transparency(self, alpha: int):
+            """Set the transparency of the particle between 0 and 255."""
+            self._p.alpha = alpha
+            return self
+
+        def anim(self, animation: Callable[[P], None]) -> Self:
             self._p.animations.append(animation)
             return self
 
+        def anim_attr(self, attr: str, func: Callable[[float], float]) -> Self:
+            """Set the attribute of the particle using a function of its life proportion."""
+            assert hasattr(self._p, attr), f"Particle has no attribute {attr}"
+
+            def anim(particle: P):
+                setattr(particle, attr, func(particle.life_prop))
+            return self.anim(anim)
+
+        def anim_alpha(self, func: Callable[[float], int]) -> Self:
+            """Set the alpha of the particle using a function of its life proportion."""
+            def anim(particle: P):
+                particle.alpha = func(particle.life_prop)
+            return self.anim(anim)
+
         def anim_fade(self, fade_start=0):
-            def fade(particle):
-                if particle.life_prop < fade_start:
-                    return
-                t = (particle.life_prop - fade_start) / (1 - fade_start)
-                alpha = int(255 * (1 - t))
-                particle.alpha = alpha
+            def fade(particle: P, fs=fade_start):
+                if particle.life_prop > fs:
+                    t = (particle.life_prop - fs) / (1 - fs)
+                    particle.alpha = int(255 * (1 - t))
 
             return self.anim(fade)
 
-        def anim_gravity(self, gravity: float | Vector2):
+        def anim_gravity(self, gravity: float | Vector2 | tuple[float, float]) -> Self:
             """Add gravity to the particle."""
             if isinstance(gravity, (int, float)):
                 gravity = Vector2(0, gravity)
@@ -267,6 +284,10 @@ class Particle:
             return self.anim(gravity_anim)
 
         def anim_blink(self, up_duration=0.5, pow=2):
+            """Make the particle blink.
+            Increase alpha linearly for a proportion of `up_duration` of its life, then decrease it linearly.
+            If `pow` is not 1, uses a power function instead of a linear one.
+            """
             def blink(particle):
                 if particle.life_prop < up_duration:
                     a = particle.life_prop / up_duration
@@ -278,7 +299,7 @@ class Particle:
             return self.anim(blink)
 
         def anim_bounce_rect(self, rect):
-            """Make the particle bounce inside of the rectangle."""
+            """Make the particle bounce on the sides, inside the rectangle."""
 
             rect = pygame.Rect(rect)
 
@@ -298,6 +319,7 @@ class Particle:
             return self.anim(bounce_rect)
 
         def anim_shrink(self):
+            """Make the particle shrink linearly as it ages."""
             initial_size = self._p.size
 
             def shrink(particle):
@@ -447,10 +469,10 @@ class PolygonParticle(DrawnParticle):
     def __init__(self, vertices: int, color=None, vertex_step: int = 1):
         """
         A particle shaped in a regular polygon.
-        
+
         Args:
             vertices: number of vertices
-            color: 
+            color:
             vertex_step: order in which to draw the vertices.
                 This can be used to draw star shaped pattern.
                 Rhe order will be 1, 1+step, 1+2*step...
