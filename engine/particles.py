@@ -87,7 +87,7 @@ class ParticleSystem(set):
         self.add(
             SquareParticle()
             .builder()
-            .hsv(gauss(20, 20), gauss(1, 0.1))
+            .hsv(gauss(20, 20), gauss(100, 10))
             .at(pos, gauss(angle, 10))
             .velocity(gauss(1, 0.1))
             .sized(uniform(1, 5))
@@ -151,7 +151,7 @@ class ParticleFountain:
         return cls(
             lambda: CircleParticle()
             .builder()
-            .hsv(angle := uniform(0, 360), 0.8, 0.8)
+            .hsv(angle := uniform(0, 360), 80, 80)
             .at(choice(positions) + from_polar(40, angle), angle + 90)
             .velocity(gauss(2, 0.2), )
             .sized(gauss(5, 2))
@@ -375,10 +375,10 @@ class DrawnParticle(Particle):
         self.color.a = value
 
     class Builder(Particle.Builder["DrawnParticle"]):
-        def hsv(self, hue, saturation=1.0, value=1.0):
+        def hsv(self, hue: float, saturation: float = 100, value: float = 100):
             hue = round(hue) % 360
-            saturation = clamp(round(100 * saturation), 0, 100)
-            value = clamp(round(100 * value), 0, 100)
+            saturation = clamp(saturation, 0, 100)
+            value = clamp(value, 0, 100)
             self._p.color.hsva = (hue, saturation, value, 100)
             return self
 
@@ -408,6 +408,7 @@ class DrawnParticle(Particle):
     def builder(self) -> Builder:
         # the method is here only for type hinting
         return self.Builder(self)
+
 
 class CircleParticle(DrawnParticle):
     def __init__(self, color=None, filled=True):
@@ -503,7 +504,6 @@ class ShardParticle(DrawnParticle):
             self.pos - vel * self.tail,
             self.pos - cross,
         ]
-
 
     def draw(self, gfx: GFX):
         gfx.polygon(self.color, self.points())
@@ -682,14 +682,14 @@ def main():
         ParticleFountain(
             lambda: SquareParticle()
             .builder()
-            .hsv(gauss(250, 15), 0.8, 0.8)
+            .hsv(gauss(250, 15), 80, 80)
             .apply(base(350))
             .build(),
         ),
         ParticleFountain(
             lambda: PolygonParticle(randint(3, 5))
             .builder()
-            .hsv(gauss(frame / 5, 8), 1, gauss(0.9, 0.05))
+            .hsv(gauss(frame / 5, 8), 100, gauss(90, 5))
             .at((uniform(0, SIZE[0]), SIZE[1] + 10), gauss(-90, 5))
             .velocity(gauss(3, 0.5))
             .inner_rotation(0, gauss(0, 2))

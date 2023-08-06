@@ -390,8 +390,9 @@ class GameState(State):
                 .builder()
                 .hsv(
                     gauss(hue, 10),
-                    gauss(0.2, 0.05),
-                    0.95)
+                    gauss(sat - 20, 5),
+                    gauss(val + 20, 5),
+                )
                 .sized(gauss(10, 2))
                 .anim_fade()
                 .at((x, y), gauss(-90, 15))
