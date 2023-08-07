@@ -9,6 +9,7 @@ import pygame.gfxdraw
 from pygame import Rect, Vector2, Color
 
 from engine import *
+from particles_np import CircleParticles, ShardParticles, Gauss, Polar
 
 PINK = pygame.Color("#E91E63")
 ORANGE = pygame.Color("#F39C12")
@@ -254,6 +255,25 @@ class Ocean(Object):
         super().__init__((0, 0))
         self.start_time = time()
 
+        self.current_particles = (
+            CircleParticles(lifespan=Gauss(200, 30),
+                            size=4,
+                            vel=Gauss(4, 0.5) & 0)
+            .animate('alpha',
+                     lambda lp: np.interp(lp,
+                                          [0, 0.3, 0.7, 1],
+                                          [0, 120, 120, 0]))
+            .add_to(self)
+        )
+        self.wave_particles = (
+            CircleParticles(lifespan=60,
+                            size=Gauss(10, 2),
+                            vel=Polar(Gauss(1, 0.5), Gauss(-90, 15)))
+            .add_fade()
+            .add_constant_speed((0, 1))
+            .add_to(self)
+        )
+
     def color(self):
         colors = [
             (0, "#3F51B5"),
@@ -289,23 +309,10 @@ class Ocean(Object):
 
         # Generate current particles
         h, s, v, _ = self.color().hsva
-        r = self.rect
         for _ in range(2):
-            self.state.particles.add(
-                CircleParticle()
-                .builder()
-                .hsv(gauss(h, 10), s, gauss(v + 20, 10))
-                .sized(4)
-                .at(random_in_rect(self.rect, (-1, 2)))
-                .velocity(gauss(4, 0.5))
-                .living(gauss(200, 30))
-                .anim_attr('alpha',
-                           lambda t: int(lerp_multi(t,
-                                                (0, 0),
-                                                (0.3, 120),
-                                                (0.7, 120),
-                                                (1, 0))))
-                .build()
+            self.current_particles.new(
+                pos=random_in_rect(self.rect, (-1, 2)),
+                color=from_hsv(gauss(h, 10), s, gauss(v + 20, 10)),
             )
 
     def draw(self, gfx: GFX):
@@ -327,20 +334,13 @@ class Ocean(Object):
         for i in range(n_particles):
             # 1.5 is to have some even when blob moves fast
             x = uniform(-W / 1.5, W / 1.5) + self.state.blob.pos.x
-            self.state.particles.add(
-                CircleParticle("#ffffff")
-                .builder()
-                .hsv(
+            self.wave_particles.new(
+                pos=(x, y),
+                color=from_hsv(
                     gauss(hue, 10),
                     gauss(sat - 20, 5),
                     gauss(val + 20, 5),
-                )
-                .sized(gauss(10, 2))
-                .anim_fade()
-                .at((x, y), gauss(-90, 15))
-                .velocity(gauss(1, 0.5))
-                .constant_force((0, 1))
-                .build()
+                ),
             )
 
 
@@ -550,9 +550,6 @@ class Game(App):
     def __init__(self):
         super().__init__(GameState, FixedScreen(SIZE), CameraGFX)
 
-def main():
-    Game().run()
-
 
 if __name__ == "__main__":
-    main()
+    Game().run()

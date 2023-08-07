@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Union, Literal
 
+import numpy as np
 import pygame
 import pygame.gfxdraw
 from pygame import Vector2, Rect
@@ -78,9 +79,9 @@ class GFX:
         x, y = self.edit_pos(pos, ui)
 
         if width == 0 and len(color) == 4 and color[3] < 255:
-            pygame.gfxdraw.filled_circle(self.surf, round(x), round(y), round(radius), color)
+            pygame.gfxdraw.filled_circle(self.surf, int(x), int(y), int(radius), color)
         elif width == 1:
-            pygame.gfxdraw.aacircle(self.surf, round(x), round(y), round(radius), color)
+            pygame.gfxdraw.aacircle(self.surf, int(x), int(y), int(radius), color)
         else:
             pygame.draw.circle(self.surf, color, (x, y), radius, width)
 
@@ -239,7 +240,7 @@ class CameraGFX(GFX):
     def edit_pos(self, pos: Vec2Like, ui: bool = False):
         if ui:
             return pos
-        return pos + self.translation
+        return pos[0] + self.translation.x, pos[1] + self.translation.y
 
 
 class WrapGFX(GFX):

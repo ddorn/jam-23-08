@@ -4,13 +4,16 @@ A fast numpy-based particle system.
 
 from __future__ import annotations
 
-from random import gauss, uniform
+from dataclasses import dataclass
+from pprint import pprint
+from random import gauss, uniform, expovariate
 from typing import TypeVar, TYPE_CHECKING, Callable
 
 import numpy as np
-from pygame import Color
+import pygame.gfxdraw
+from pygame import Color, Vector2
 
-from engine import Vec2Like, GFX, State, from_polar, random_rainbow_color, App, FixedScreen, Object
+from engine import Vec2Like, GFX, State, from_polar, random_rainbow_color, App, FixedScreen, Object, CameraGFX
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
@@ -20,16 +23,9 @@ if TYPE_CHECKING:
 class Particles:
     """A fast numpy-based particle system."""
 
-    def __init__(self, capacity: int = 100, **extra_buffers: type):
-        """
-        Create a new particle system.
-
-        Args:
-            capacity: The initial capacity of the particle system.
-            **extra_buffers: Extra buffers to add to the particle system.
-                The key is the name of the buffer, and the value is the numpy dtype.
-                This can be used to create custom animations with custom data without subclassing.
-        """
+    def __init__(self, **init_values):
+        """Create a new particle system."""
+        capacity = 64
 
         self.pos = np.zeros((capacity, 2))
         self.vel = np.zeros((capacity, 2))
@@ -40,9 +36,7 @@ class Particles:
         self.n_alive = 0
         self.size = np.zeros(capacity)
 
-        self.extra_buffers = extra_buffers
-        for name, dtype in extra_buffers.items():
-            setattr(self, name, np.zeros(capacity, dtype=dtype))
+        self.init_values = init_values
 
         self.to_kill = np.zeros(capacity, dtype=bool)
         self.animations = []
@@ -58,7 +52,7 @@ class Particles:
             vel: Vec2Like = (0, 0),
             acc: Vec2Like = (0, 0),
             color: ColorValue = (255, 255, 255, 255),
-            lifespan: float = 100,
+            lifespan: float = 60,
             size: float = 1.0,
             **extra_data
             ):
@@ -78,7 +72,17 @@ class Particles:
         for name, value in extra_data.items():
             getattr(self, name)[index] = value
 
+        for name, value in self.init_values.items():
+            if callable(value):
+                value = value()
+            getattr(self, name)[index] = value
+
         return index
+
+    @property
+    def alpha(self):
+        """Transparency of the particles."""
+        return self.color[:, 3]
 
     def resize(self, capacity: int):
         """Expand the capacity of the particle system."""
@@ -144,23 +148,69 @@ class Particles:
         self.animations.append(animation)
         return self
 
+    def animate(self, attr: str, easing: Callable[[np.ndarray], None]):
+        """
+        Animate an attribute of the particle system.
+
+        Args:
+            attr: The name of the attribute to animate.
+            easing: A function that takes the proportion of life remaining (0 = just born, 1 = about to die)
+                and returns a new value for the attribute.
+                Note: life_prop is a numpy array of shape (n_alive,).
+        """
+
+        def _anim(particles: Particles, life_prop: np.ndarray):
+            getattr(particles, attr)[:particles.n_alive] = easing(life_prop)
+
+        return self.add_animation(_anim)
+
     def add_fade(self):
-        """
-        Particles will fade out as they age.
-        """
+        """Particles will fade out as they age."""
 
         def _anim(particles: Particles, life_prop: np.ndarray):
             particles.color[:particles.n_alive, 3] = 255 * (1 - life_prop)
 
         return self.add_animation(_anim)
 
+    def add_constant_speed(self, speed: Vec2Like):
+        """Particles will move at a constant speed."""
+
+        def _anim(particles: Particles, life_prop: np.ndarray):
+            particles.pos[:particles.n_alive] += speed
+
+        return self.add_animation(_anim)
+
     # Utility functions
 
-    def add_to_state(self, state: State):
-        """Add the particle system to a state."""
-        # We create an object because we don't want Particles to be a subclass of Object
-        state.add(ParticleObject(self))
+    def add_to(self, target: State | Object):
+        """Add the particle system to a state or the state of an object."""
+        # Note: this function exists because we don't want Particles to be a subclass of Object
+
+        if isinstance(target, State):
+            target.add(ParticleObject(self))
+        elif isinstance(target, Object):
+            if target.state is None:
+                # Here the object has not been added to a state yet, so we add it
+                # on the next frame
+                @target.add_script_decorator
+                def _add_later():
+                    yield
+                    target.state.add(ParticleObject(self))
+            else:
+                target.state.add(ParticleObject(self))
+        else:
+            raise TypeError("state must be a State or an Object")
         return self
+
+    def print_one(self, index: int = 0):
+        """Print the data of one particle."""
+        print("Particle", index)
+        d = {
+            name: getattr(self, name)[index]
+            for name in self.__dict__
+            if isinstance(getattr(self, name), np.ndarray)
+        }
+        pprint(d)
 
 
 class ParticleObject(Object):
@@ -170,26 +220,38 @@ class ParticleObject(Object):
         super().__init__((0, 0))
         self.particles = particles
 
-    def logic(self):
-        super().logic()
-        self.particles.logic()
-
     def draw(self, gfx: GFX):
         super().draw(gfx)
+        # We draw and do the logic at once, because particles can be added at any time
+        # by any object, and we want to guarantee that logic() was called at least once
+        # before draw() so that the animations work properly.
+        self.particles.logic()
         self.particles.draw(gfx)
 
 
 class CircleParticles(Particles):
     def draw(self, gfx: GFX):
+        radius = self.size[:self.n_alive].astype(int).tolist()
+
+        if isinstance(gfx, CameraGFX):
+            # Shortcircuit for speed
+            pos = self.pos[:self.n_alive] + gfx.translation
+            pos = pos.astype(int).tolist()
+            for color, pos, radius in zip(self.color[:self.n_alive], pos, radius):
+                pygame.gfxdraw.filled_circle(gfx.surf, *pos, radius, color)
+            return
+
+        pos = self.pos[:self.n_alive].astype(int).tolist()
         for i in range(self.n_alive):
-            gfx.circle(self.color[i], self.pos[i], self.size[i])
+            gfx.circle(self.color[i], Vector2(pos[i]), radius[i])
 
 
 class ShardParticles(Particles):
-    def __init__(self, capacity: int = 100, **extra_buffers: type):
-        super().__init__(capacity, **extra_buffers)
-        self.tail_length = np.zeros(capacity)
-        self.head_length = np.zeros(capacity)
+
+    def __init__(self, **init_values):
+        super().__init__(**init_values)
+        self.tail_length = np.zeros(len(self))
+        self.head_length = np.zeros(len(self))
 
     def new(self,
             pos: Vec2Like,
@@ -218,10 +280,103 @@ class ShardParticles(Particles):
             pos - direction * self.tail_length[:n, None],
             pos - cross_dir,
         ]
-        points = np.stack(points, axis=1)
-        for ps, color in zip(points, self.color[:n]):
+        points = np.stack(points, axis=1).astype(int).tolist()
+        for ps, color in zip(points, self.color[:n].tolist()):
             gfx.polygon(color, ps)
 
+
+def call_if_needed(x):
+    """Call x if it is a function, otherwise return x."""
+    return x() if callable(x) else x
+
+
+@dataclass
+class Distribution:
+    """A distribution of values."""
+
+    def __call__(self):
+        raise NotImplementedError
+
+    # Overload &
+    def __and__(self, other: "Distribution" | object):
+        """Combine two distributions into a joint distribution."""
+        return JointDistribution(self, other)
+
+
+@dataclass
+class JointDistribution(Distribution):
+    """A joint distribution of values."""
+    distributions: list[Distribution]
+
+    def __init__(self, *distributions: Distribution | object):
+        # Flatten nested joint distributions
+        self.distributions = []
+        for d in distributions:
+            if isinstance(d, JointDistribution):
+                self.distributions.extend(d.distributions)
+            else:
+                self.distributions.append(d)
+
+    def __call__(self):
+        return tuple(call_if_needed(d) for d in self.distributions)
+
+
+@dataclass
+class Gauss(Distribution):
+    """A Gaussian distribution."""
+    mean: float
+    std: float
+
+    def __call__(self):
+        return gauss(self.mean, self.std)
+
+
+@dataclass
+class Uniform(Distribution):
+    """A uniform distribution."""
+    a: float
+    b: float
+
+    def __call__(self):
+        return uniform(self.a, self.b)
+
+    @classmethod
+    def angle(cls):
+        """A uniform distribution of angles in degrees."""
+        return cls(0, 360)
+
+
+@dataclass
+class Exp(Distribution):
+    """An exponential distribution."""
+    rate: float
+
+    def __call__(self):
+        return expovariate(self.rate)
+
+
+@dataclass
+class Polar(Distribution):
+    """A polar distribution."""
+    r: float | Distribution
+    theta: float | Distribution
+    """The angle in degrees."""
+
+    def __call__(self):
+        return from_polar(call_if_needed(self.r), call_if_needed(self.theta))
+
+
+__all__ = [
+    "Particles",
+    "CircleParticles",
+    "ShardParticles",
+    "Gauss",
+    "Uniform",
+    "Exp",
+    "Polar",
+    "Distribution",
+    "JointDistribution",
+]
 
 if __name__ == "__main__":
     SIZE = (1300, 800)
@@ -233,7 +388,7 @@ if __name__ == "__main__":
 
         def __init__(self):
             super().__init__()
-            self.shard = CircleParticles().add_fade().add_to_state(self)
+            self.shard = CircleParticles().add_fade().add_to(self)
 
         def logic(self):
             super().logic()
