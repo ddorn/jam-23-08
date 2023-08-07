@@ -2,7 +2,6 @@ from typing import Tuple
 
 import pygame
 
-
 __all__ = [
     "Screen",
     "FixedScreen",
@@ -22,12 +21,12 @@ class Screen:
 
     def resize(self, new_size=None):
         self.window = pygame.display.set_mode(new_size or self.window_size, self.FLAGS)
-        self.window_size = self.window.get_size()  # We don't always get the size asked for.
+        self.window_size = (self.window.get_size())  # We don't always get the size asked for.
         self.draw_surface = self.window
 
     def update_window(self):
         """Transfer the contents of the draw_surface to the window.
-         Called every frame before pygame.display.flip()."""
+        Called every frame before pygame.display.flip()."""
 
     def fixup_mouse_input(self, event):
         """Fix the mouse events to take any resizing into account."""
@@ -48,6 +47,7 @@ class FixedScreen(Screen):
 
 
 class FreeScreen(Screen):
+
     def __init__(self, size=None):
         self.window_size = size or self._biggest_screen_available()
         self.resize()
@@ -67,6 +67,7 @@ class IntegerScaleScreen(Screen):
 
 
 class BlackBordersScreen(Screen):
+
     def __init__(self, design_size, border_color="black"):
         self.border_color = border_color
         self.design_size = pygame.Vector2(design_size)
@@ -78,13 +79,14 @@ class BlackBordersScreen(Screen):
     @property
     def scale(self):
         return min(
-            self.window_size[0] / self.design_size[0], self.window_size[1] / self.design_size[1],
+            self.window_size[0] / self.design_size[0],
+            self.window_size[1] / self.design_size[1],
         )
 
     def resize(self, new_size=None):
         self.window = pygame.display.set_mode(new_size or self.window_size, self.FLAGS)
         self.window.fill(self.border_color)
-        self.window_size = self.window.get_size()  # We don't always get the size asked for.
+        self.window_size = (self.window.get_size())  # We don't always get the size asked for.
 
         scaled_draw_area = self.design_size * self.scale
         topleft = (pygame.Vector2(self.window_size) - scaled_draw_area) / 2
@@ -128,7 +130,7 @@ class ExtendFieldOfViewScreen(Screen):
 
     def resize(self, new_size=None):
         self.window = pygame.display.set_mode(new_size or self.window_size, self.FLAGS)
-        self.window_size = self.window.get_size()  # We don't always get the size asked for.
+        self.window_size = (self.window.get_size())  # We don't always get the size asked for.
         self.window.fill("black")
 
         # We round the window_size to the nearest multiple

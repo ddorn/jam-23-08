@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-
 __all__ = ["Settings", "settings"]
 
 from .constants import ASSETS_DIR

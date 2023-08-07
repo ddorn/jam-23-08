@@ -8,7 +8,6 @@ from .constants import *
 from .settings import settings
 from .utils import overlay
 
-
 __all__ = [
     "sound",
     "play",
@@ -25,6 +24,7 @@ __all__ = [
     "Assets",
     "Animation",
 ]
+
 
 @lru_cache()
 def sound(name):
@@ -147,6 +147,7 @@ def tilemap(name, x, y, tile_size=32):
 
 
 class Image:
+
     def __init__(self, name):
         self.name = name
         self.surface: Optional[pygame.Surface] = None
@@ -162,6 +163,7 @@ class Image:
 
 
 class SpriteSheet(Image):
+
     def __init__(self, name, tile_size, auto_crop=False):
         super().__init__(name)
         self.tile_size = tile_size
@@ -177,11 +179,11 @@ class SpriteSheet(Image):
         col %= tiles_in_a_row
 
         return self.surface.subsurface(
-            (col * self.tile_size, row * self.tile_size, self.tile_size, self.tile_size)
-        )
+            (col * self.tile_size, row * self.tile_size, self.tile_size, self.tile_size))
 
 
 class Assets:
+
     class Images:
         enemies = SpriteSheet("enemies", 16)
         player = Image("player")
@@ -201,6 +203,7 @@ class Assets:
 
 
 class Animation:
+
     def __init__(self, name: str, override_frame_duration=None, flip_x=False):
         self.timer = 0
         self.name = name

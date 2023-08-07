@@ -33,7 +33,7 @@ def fainter(color, multiplier):
         h,
         s,
         l * multiplier + 100 * (1 - multiplier),
-        a * multiplier ** 2 / 2,
+        a * multiplier**2 / 2,
     )
     return color
 
@@ -42,20 +42,19 @@ class Blob(Object):
     Z = 10
 
     def __init__(
-            self,
-            x,
-            y,
-            size=20,
-            part_radius=5,
-            points=5,
-            controllable=False,
-            hue_range: tuple[int, int] | None = None,
-            hist_size: int = 50,
-            max_hist_size: int = 100,
-            acceleration: float = 5,
-            friction: float = 0.8,
+        self,
+        x,
+        y,
+        size=20,
+        part_radius=5,
+        points=5,
+        controllable=False,
+        hue_range: tuple[int, int] | None = None,
+        hist_size: int = 50,
+        max_hist_size: int = 100,
+        acceleration: float = 5,
+        friction: float = 0.8,
     ):
-
         hit_size = size * 2 + part_radius * 2
         super().__init__((x, y), (hit_size, hit_size))
 
@@ -164,17 +163,20 @@ class Blob(Object):
 
         # Remove old points
         # self.points_to_draw.sort(key=lambda x: x[3])
-        self.points_to_draw = [p for p in self.points_to_draw if self.time - p[3][0] < self.hist_size]
+        self.points_to_draw = [
+            p for p in self.points_to_draw if self.time - p[3][0] < self.hist_size
+        ]
 
         # Check collision with fairies
         fairy: Fairy
         for fairy in self.state.get_all(Fairy):
-            if fairy.pos.distance_to(self.pos) < fairy.radius + self.radius + self.part_radius:
+            if (fairy.pos.distance_to(self.pos) < fairy.radius + self.radius + self.part_radius):
                 fairy.alive = False
                 self.hist_size += 3
                 for i in range(self.n_points):
                     angle = i * 360 / self.n_points
                     color = from_hsv(angle, 70, 90)
+                    # fmt: off
                     self.state.particles.add(
                         ShardParticle(color)
                         .builder()
@@ -183,6 +185,7 @@ class Blob(Object):
                         .anim_fade(0.2)
                         .build()
                     )
+                    # fmt: on
 
                 self.add_speed_buff(fairy.hue)
 
@@ -192,6 +195,7 @@ class Blob(Object):
         self.hist_size = min(self.hist_size, self.max_hist_size)
 
     def add_speed_buff(self, angle: float):
+
         @self.add_script_decorator
         def speed_buff():
             for _ in range(10):
@@ -230,6 +234,7 @@ class Blob(Object):
             for frame in range(1, 3):
                 yield
                 for _ in rrange(strength):
+                    # fmt: off
                     self.state.particles.add(
                         CircleParticle(color)
                         .builder()
@@ -244,6 +249,7 @@ class Blob(Object):
                         .anim_fade(0.2)
                         .build()
                     )
+                    # fmt: on
 
     def draw(self, gfx: GFX, force_alpha: float | None = None):
         super().draw(gfx)
@@ -264,6 +270,7 @@ class Ocean(Object):
         super().__init__((0, 0))
         self.start_time = time()
 
+        # fmt: off
         self.current_particles = (
             CircleParticles(lifespan=Gauss(200, 30),
                             size=4,
@@ -282,6 +289,7 @@ class Ocean(Object):
             .add_constant_speed((0, 1))
             .add_to(self)
         )
+        # fmt: on
 
     def color(self):
         colors = [
@@ -294,7 +302,6 @@ class Ocean(Object):
             (35, "#601B06"),
             (40, "#2E2B08"),
             (45, "#002620"),
-
         ]
         return gradient(time() - self.start_time, *colors)
 
@@ -331,10 +338,10 @@ class Ocean(Object):
         # If at the surface, draw the sky
         x, y = self.state.camera_pos
         if y < SURFACE + H:
-            gfx.rect(WHITE, x, SURFACE, W, H, anchor='midbottom')
+            gfx.rect(WHITE, x, SURFACE, W, H, anchor="midbottom")
             self.generate_waves_particles(SURFACE)
         if y > OTHER_SIDE - H:
-            gfx.rect(BLACK, x, OTHER_SIDE, W, H, anchor='midtop')
+            gfx.rect(BLACK, x, OTHER_SIDE, W, H, anchor="midtop")
             self.generate_waves_particles(OTHER_SIDE)
 
     def generate_waves_particles(self, y: float):
@@ -359,7 +366,10 @@ class Fairy(SpriteObject):
     def __init__(self, pos):
         self.hue = randrange(0, 360, 60)
         img = pygame.Surface((80, 80), pygame.SRCALPHA)
-        super().__init__(pos, img, )
+        super().__init__(
+            pos,
+            img,
+        )
 
         # Add a new circle on the image
         for _ in range(256):
@@ -421,6 +431,7 @@ class Enemy(Object):
 
             h, s, v, _ = Color(choice([RED, WHITE, BLACK])).hsva
 
+            # fmt: off
             self.state.particles.add(
                 CircleParticle()
                 .builder()
@@ -433,9 +444,11 @@ class Enemy(Object):
                 .sized(1 + expovariate(0.9))
                 .build()
             )
+            # fmt: on
 
             # for color in [RED, WHITE, BLACK]:
             for _ in range(3):
+                # fmt: off
                 self.state.particles.add(
                     CircleParticle()
                     .builder()
@@ -451,6 +464,7 @@ class Enemy(Object):
                     .anim_shrink()
                     .build()
                 )
+                # fmt: on
 
         if self.pos.x < self.state.blob.pos.x - W:
             self.alive = False
@@ -465,7 +479,7 @@ class Enemy(Object):
             prop = self.timer / self.warning_duration * 2
             alpha = lerp(0, 255, prop, clamp=True)
             radius = lerp(1, self.SIZE * 2, prop, clamp=True)
-            gfx.circle(RED + (alpha,), self.center, radius)
+            gfx.circle(RED + (alpha, ), self.center, radius)
 
 
 class GameState(State):
@@ -479,18 +493,19 @@ class GameState(State):
         self.use_fog = True
         self.add(Ocean())
 
-        self.blob = self.add(Blob(
-            W / 2,
-            -H / 2,
-            10,
-            6,
-            6,
-            True,
-            acceleration=3,
-            friction=0.8,
-            hist_size=10,
-            max_hist_size=50,
-        ))
+        self.blob = self.add(
+            Blob(
+                W / 2,
+                -H / 2,
+                10,
+                6,
+                6,
+                True,
+                acceleration=3,
+                friction=0.8,
+                hist_size=10,
+                max_hist_size=50,
+            ))
         # self.debug.toggle()
 
         for i in range(10):

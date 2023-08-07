@@ -1,5 +1,6 @@
 import sys
-sys.path.append('engine')
+
+sys.path.append("engine")
 
 from collections import defaultdict
 from math import cos, pi, sin
@@ -26,7 +27,10 @@ SKY_TOP = (73, 231, 236)
 LINES = (255, 79, 105)
 BG_COLOR = (43, 15, 84)
 band_height = 9
-infinity = pygame.Vector2(W / 4, H * 0.46 // band_height * band_height,)
+infinity = pygame.Vector2(
+    W / 4,
+    H * 0.46 // band_height * band_height,
+)
 
 
 class Sunset(State):
@@ -72,7 +76,10 @@ class Sunset(State):
 
         # Defining the shape of the sun
         pygame.draw.circle(
-            mask, "white", (radius, radius), radius,
+            mask,
+            "white",
+            (radius, radius),
+            radius,
         )
         # Removing bands
         y = 9
@@ -108,7 +115,6 @@ class Sunset(State):
         # self.particles.logic()
 
     def draw(self, gfx: "GFX"):
-
         for y in range(0, H // 2, band_height):
             color = utils.mix(SKY_TOP, SKY_END, y / H * 2)
             gfx.surf.fill(color, (0, y, W, band_height))
@@ -116,7 +122,7 @@ class Sunset(State):
         # self.particles.draw(gfx.surf)
 
         # Sun rays and sun
-        self.draw_rays(gfx, infinity, SUN_BOTTOM + (50,))
+        self.draw_rays(gfx, infinity, SUN_BOTTOM + (50, ))
         gfx.blit(self.draw_sun(54), center=infinity)
         # Second sun
         # other = (W, -15)
@@ -133,7 +139,7 @@ class Sunset(State):
         n = -1
         while y > H / 2:
             pygame.gfxdraw.hline(gfx.surf, 0, W, round(y), LINES)
-            y = infinity[1] + (H / 2 - dy) * (prop ** n)
+            y = infinity[1] + (H / 2 - dy) * (prop**n)
             n += 1
         pygame.gfxdraw.hline(gfx.surf, 0, W, H // 2, LINES)
 
@@ -157,9 +163,7 @@ class Sunset(State):
 
         if not "DRAW MENU":
             margin = 30
-            menu_rect = pygame.Rect(
-                W / 2 + margin, margin, W / 2 - 2 * margin, H - margin * 2
-            )
+            menu_rect = pygame.Rect(W / 2 + margin, margin, W / 2 - 2 * margin, H - margin * 2)
             menu_rect.midright = W - margin, H / 2
             pygame.gfxdraw.box(gfx.surf, menu_rect, (0, 0, 0, 125))
             pygame.draw.rect(gfx.surf, utils.mix(SUN_TOP, SUN_BOTTOM, 0.5), menu_rect, 1)
@@ -170,12 +174,13 @@ class Sunset(State):
         pygame.gfxdraw.box(
             gfx.surf,
             sig.get_rect(bottomleft=(4, H - 2)).inflate(8, 4),
-            BG_COLOR + (200,),
+            BG_COLOR + (200, ),
         )
         gfx.blit(sig, bottomleft=(4, H - 2))
 
 
 class Bird(Object):
+
     def __init__(self, pos, flip=False):
         super().__init__(pos)
 
@@ -185,7 +190,6 @@ class Bird(Object):
 
     def script(self):
         while True:
-
             if randrange(6) == 0:
                 yield from self.pick()
             elif randrange(15) == 0:
@@ -222,7 +226,7 @@ class Bird(Object):
         dur = 20
         dir = -1 if self.flip else 1
         for i in range(dur, 0, -1):
-            self.pos = start_pos + (i * 3 * dir, -(i ** 2) / 15)
+            self.pos = start_pos + (i * 3 * dir, -(i**2) / 15)
             yield
 
         self.pos = start_pos
@@ -277,8 +281,7 @@ class Boid:
     def flockmates(self, all_boids: "SpaceHash", dist):
         x, y = self.grid(all_boids.case_size)
         return [
-            boid
-            for boid in all_boids.neighbors(x, y)
+            boid for boid in all_boids.neighbors(x, y)
             if boid.pos.distance_to(self.pos) < dist and boid is not self
         ]
 
@@ -302,7 +305,7 @@ class Boid:
         force = pygame.Vector2()
         for boid in self.flockmates(all_boids, self.AVOID_RADIUS):
             dist = self.pos.distance_to(boid.pos)
-            force += (self.pos - boid.pos) / dist ** 2
+            force += (self.pos - boid.pos) / dist**2
 
         return force * self.AVOID_STRENGTH
 
@@ -322,9 +325,7 @@ class Boid:
         if not cohesion:
             return pygame.Vector2()
 
-        center_of_mass = sum((b.pos for b in cohesion), start=pygame.Vector2()) / len(
-            cohesion
-        )
+        center_of_mass = sum((b.pos for b in cohesion), start=pygame.Vector2()) / len(cohesion)
         vec_to_center = center_of_mass - self.pos
         if vec_to_center:
             vec_to_center.scale_to_length(self.max_speed)
@@ -345,9 +346,7 @@ class Boid:
             if dist < self.WALL_RADIUS:
                 # We project the normal on the velocity ro make it steer away
                 dir = self.vel.normalize()
-                avg = (
-                    1 - self.WALL_STRENGTH
-                ) * dir + self.WALL_STRENGTH * pygame.Vector2(normal)
+                avg = (1 - self.WALL_STRENGTH) * dir + self.WALL_STRENGTH * pygame.Vector2(normal)
                 avg.scale_to_length(self.max_speed)
                 steering += avg - self.vel
                 continue
@@ -365,6 +364,7 @@ class Boid:
 
 
 class SpaceHash(defaultdict):
+
     def __init__(self, boids, case_size):
         super().__init__(list)
         self.case_size = case_size
@@ -380,6 +380,7 @@ class SpaceHash(defaultdict):
 
 
 class Boids(Object):
+
     def __init__(self, n_boids=300):
         super().__init__((0, 0))
         self.boids = [Boid((uniform(0, W), uniform(0, H / 2))) for _ in range(n_boids)]
@@ -402,7 +403,10 @@ class Boids(Object):
             pygame.draw.line(gfx.surf, "blue", b.pos, b.pos + 10 * b.vel)
             pygame.draw.line(gfx.surf, "orange", b.pos, b.pos + 1000 * b.acc)
             pygame.draw.rect(
-                gfx.surf, "violet", b.WALLS, 1,
+                gfx.surf,
+                "violet",
+                b.WALLS,
+                1,
             )
 
 

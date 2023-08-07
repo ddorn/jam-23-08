@@ -64,6 +64,7 @@ class Scriptable:
         """
 
         def decorator(func):
+
             def script():
                 yield from range(nb_of_frames)
                 func()
@@ -163,13 +164,13 @@ class SpriteObject(Object):
     INITIAL_ROTATION = UPWARDS
 
     def __init__(
-        self,
-        pos,
-        image: pygame.Surface,
-        offset=(0, 0),
-        size: Optional[Tuple[int, int]] = None,
-        vel=(0, 0),
-        rotation=0,
+            self,
+            pos,
+            image: pygame.Surface,
+            offset=(0, 0),
+            size: Optional[Tuple[int, int]] = None,
+            vel=(0, 0),
+            rotation=0,
     ):
         """
         An object with an image.
@@ -186,8 +187,7 @@ class SpriteObject(Object):
 
         if self.SCALE > 1:
             image = pygame.transform.scale(
-                image, (self.SCALE * image.get_width(), self.SCALE * image.get_height())
-            )
+                image, (self.SCALE * image.get_width(), self.SCALE * image.get_height()))
         if size is None:
             size = image.get_size()
 
@@ -219,19 +219,14 @@ class SpriteObject(Object):
     @property
     def sprite_center(self):
         """Position of the center of the sprite, in world coordinates."""
-        return (
-            self.pos
-            + self.image_offset * self.SCALE
-            + pygame.Vector2(self.base_image.get_size()) / 2
-        )
+        return (self.pos + self.image_offset * self.SCALE +
+                pygame.Vector2(self.base_image.get_size()) / 2)
 
     def sprite_to_screen(self, pos):
         """Convert a position in the sprite to its world coordinates."""
         pos = (
-            pygame.Vector2(pos)
-            + (0.5, 0.5)  # To get the center of the pixel
-            - pygame.Vector2(self.base_image.get_size()) / 2 / self.SCALE
-        )
+            pygame.Vector2(pos) + (0.5, 0.5)  # To get the center of the pixel
+            - pygame.Vector2(self.base_image.get_size()) / 2 / self.SCALE)
         pos.rotate_ip(-self.rotation)
         pos *= self.SCALE
         r = self.sprite_center + pos
@@ -249,7 +244,13 @@ class Entity(SpriteObject):
     INITIAL_LIFE = 1000
 
     def __init__(
-        self, pos, image: pygame.Surface, offset=(0, 0), size=(1, 1), vel=(0, 0), rotation=0,
+            self,
+            pos,
+            image: pygame.Surface,
+            offset=(0, 0),
+            size=(1, 1),
+            vel=(0, 0),
+            rotation=0,
     ):
         super().__init__(pos, image, offset, size, vel, rotation)
         self.max_life = self.INITIAL_LIFE
@@ -266,6 +267,7 @@ class Entity(SpriteObject):
         self.life += amount
 
         pos = random_in_rect(self.rect)
+        # fmt: off
         self.state.particles.add(
             TextParticle(str(int(amount)), GREEN)
             .builder()
@@ -276,6 +278,7 @@ class Entity(SpriteObject):
             .anim_bounce_size_and_shrink()
             .build()
         )
+        # fmt: on
 
     def damage(self, amount, ignore_invincibility=False):
         if amount < 0:
@@ -295,6 +298,7 @@ class Entity(SpriteObject):
             self.alive = False
 
         pos = random_in_rect(self.rect)
+        # fmt: off
         self.state.particles.add(
             TextParticle(str(int(amount)), RED)
             .builder()
@@ -305,6 +309,7 @@ class Entity(SpriteObject):
             .anim_bounce_size()
             .build()
         )
+        # fmt: on
 
     def logic(self):
         super().logic()
@@ -317,7 +322,8 @@ class Entity(SpriteObject):
     def draw(self, gfx):
         if self.last_hit < 3:
             gfx.surf.blit(
-                overlay(self.image, RED), self.image.get_rect(center=self.sprite_center),
+                overlay(self.image, RED),
+                self.image.get_rect(center=self.sprite_center),
             )
             return
 

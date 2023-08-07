@@ -16,13 +16,14 @@ from .settings import settings
 if TYPE_CHECKING:
     from .object import Object
 
-TObject = TypeVar("TObject", bound='Object')
+TObject = TypeVar("TObject", bound="Object")
 
 __all__ = ["State", "StateMachine", "StateOperations"]
 
 
 class StateOperations(Enum):
     """Operations that can be performed on a state stack."""
+
     NOP = 0
     POP = 1
     PUSH = 2
@@ -117,7 +118,7 @@ class State(Scriptable):
             - self.pop_state()
             - self.push_state(new)
             - self.replace_state(new)
-       """
+        """
         super().logic()
 
         self.timer += 1
@@ -242,6 +243,7 @@ class State(Scriptable):
         self.next_state = (StateOperations.REPLACE, new)
 
     def push_state_callback(self, new: Type["State"], *args):
+
         def callback(*_):
             # noinspection PyArgumentList
             self.next_state = (StateOperations.PUSH, new(*args))
@@ -249,6 +251,7 @@ class State(Scriptable):
         return callback
 
     def replace_state_callback(self, new: Type["State"], *args):
+
         def callback(*_):
             # noinspection PyArgumentList
             self.next_state = (StateOperations.REPLACE, new(*args))
@@ -257,6 +260,7 @@ class State(Scriptable):
 
 
 class StateMachine:
+
     def __init__(self, initial_state: Type[State]):
         self._state: Union[State, None] = None
         self.stack: List[State] = []

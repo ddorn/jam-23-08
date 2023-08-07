@@ -58,21 +58,18 @@ class Title(Object):
             yield
 
         for i in range(larger_frames):
-            self.bg_rect.height = (self.size.y + 10) * chrange(
-                i, (0, larger_frames - 1), (0, 1), flipped=True
-            )
+            self.bg_rect.height = (self.size.y + 10) * chrange(i, (0, larger_frames - 1), (0, 1),
+                                                               flipped=True)
             self.bg_rect.center = self.center
-            self.shown_image = self.text_surf.subsurface(
-                self.text_surf.get_rect().inflate(
-                    0, -self.size.y * chrange(i, (0, larger_frames - 1), (0, 1)),
-                )
-            )
+            self.shown_image = self.text_surf.subsurface(self.text_surf.get_rect().inflate(
+                0,
+                -self.size.y * chrange(i, (0, larger_frames - 1), (0, 1)),
+            ))
             yield
 
         for i in range(widen_frames):
-            self.bg_rect.width = (WORLD.width + 2) * chrange(
-                i, (0, widen_frames - 1), (0, 1), flipped=True
-            )
+            self.bg_rect.width = (WORLD.width + 2) * chrange(i, (0, widen_frames - 1), (0, 1),
+                                                             flipped=True)
             self.bg_rect.center = self.center
             yield
 
@@ -175,7 +172,6 @@ class Text(SpriteObject):
     Z = 10
 
     def __init__(self, txt, color, size: int, font_name=None, **anchor):
-
         img = text(txt, size, color, font_name)
         pos = img.get_rect(**anchor).topleft
 

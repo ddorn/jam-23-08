@@ -48,7 +48,6 @@ class HealthBar(Object):
         self.last_health = self.entity.life
 
     def draw(self, gfx: "GFX"):
-
         prop = self.entity.life / self.entity.max_life
         width = ceil(self.size.x * prop)
         flash = ceil(self.size.x * self.flash_size / self.entity.max_life)
@@ -57,11 +56,17 @@ class HealthBar(Object):
         x, y = self.pos
         gfx.box(self.color, (*self.pos, width, self.size.y))
         if flash > 0:
-            gfx.box(WHITE + (self.color.a,), (x + width, y, flash, self.size.y))
+            gfx.box(WHITE + (self.color.a, ), (x + width, y, flash, self.size.y))
 
         if lost > 0:
             gfx.box(
-                self.empty_color, (x + width + flash, y, lost, self.size.y,),
+                self.empty_color,
+                (
+                    x + width + flash,
+                    y,
+                    lost,
+                    self.size.y,
+                ),
             )
 
         if self.show_hp:

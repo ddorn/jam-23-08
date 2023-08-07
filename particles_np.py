@@ -13,8 +13,19 @@ import numpy as np
 import pygame.gfxdraw
 from pygame import Color, Vector2
 
-from engine import Vec2Like, GFX, State, from_polar, random_rainbow_color, App, FixedScreen, Object, CameraGFX, \
-    SMALL_FONT, text
+from engine import (
+    Vec2Like,
+    GFX,
+    State,
+    from_polar,
+    random_rainbow_color,
+    App,
+    FixedScreen,
+    Object,
+    CameraGFX,
+    SMALL_FONT,
+    text,
+)
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
@@ -30,7 +41,7 @@ class Particles:
     - If you need to store a list/ndarray of values that does not correspond to a particle, add it to the IGNORED_BUFFERS
     """
 
-    IGNORED_BUFFERS = ('animations',)
+    IGNORED_BUFFERS = ("animations", )
 
     def __init__(self, **init_values):
         """Create a new particle system."""
@@ -56,15 +67,16 @@ class Particles:
     def __len__(self):
         return len(self.pos)
 
-    def new(self,
-            pos: Vec2Like,
-            vel: Vec2Like = (0, 0),
-            acc: Vec2Like = (0, 0),
-            color: ColorValue = (255, 255, 255, 255),
-            lifespan: float = 60,
-            size: float = 1.0,
-            **extra_data
-            ):
+    def new(
+        self,
+        pos: Vec2Like,
+        vel: Vec2Like = (0, 0),
+        acc: Vec2Like = (0, 0),
+        color: ColorValue = (255, 255, 255, 255),
+        lifespan: float = 60,
+        size: float = 1.0,
+        **extra_data,
+    ):
         """Create a new particle."""
         if self.n_alive >= len(self):
             self.resize(len(self) * 2)
@@ -230,6 +242,7 @@ class Particles:
                 def _add_later():
                     yield
                     target.state.add(ParticleObject(self))
+
             else:
                 target.state.add(ParticleObject(self))
         else:
@@ -242,8 +255,7 @@ class Particles:
         d = {
             name: array[index]
             for name, array in self.__dict__.items()
-            if name not in self.IGNORED_BUFFERS
-               and isinstance(array, (np.ndarray, list))
+            if name not in self.IGNORED_BUFFERS and isinstance(array, (np.ndarray, list))
         }
         pprint(d)
 
@@ -265,6 +277,7 @@ class ParticleObject(Object):
 
 
 class CircleParticles(Particles):
+
     def draw(self, gfx: GFX):
         radius = self.size[:self.n_alive].astype(int).tolist()
 
@@ -288,24 +301,34 @@ class ShardParticles(Particles):
         self.tail_length = np.zeros(len(self))
         self.head_length = np.zeros(len(self))
 
-    def new(self,
-            pos: Vec2Like,
-            vel: Vec2Like = (0, 0),
-            acc: Vec2Like = (0, 0),
-            color: ColorValue = (255, 255, 255, 255),
-            lifespan: float = 100,
-            size: float = 1.0,
-            tail_length: float = 1.0,
-            head_length: float = 3.0,
-            **extra_data
-            ):
-        return super().new(pos, vel, acc, color, lifespan, size,
-                           tail_length=tail_length, head_length=head_length,
-                           **extra_data)
+    def new(
+        self,
+        pos: Vec2Like,
+        vel: Vec2Like = (0, 0),
+        acc: Vec2Like = (0, 0),
+        color: ColorValue = (255, 255, 255, 255),
+        lifespan: float = 100,
+        size: float = 1.0,
+        tail_length: float = 1.0,
+        head_length: float = 3.0,
+        **extra_data,
+    ):
+        return super().new(
+            pos,
+            vel,
+            acc,
+            color,
+            lifespan,
+            size,
+            tail_length=tail_length,
+            head_length=head_length,
+            **extra_data,
+        )
 
     def draw(self, gfx: GFX):
         n = self.n_alive
-        direction = self.vel[:n] / np.linalg.norm(self.vel[:n], axis=1)[:, None] * self.size[:n, None]
+        direction = (self.vel[:n] / np.linalg.norm(self.vel[:n], axis=1)[:, None] *
+                     self.size[:n, None])
         cross_dir = np.array([direction[:, 1], -direction[:, 0]]).T
 
         pos = self.pos[:n]
@@ -323,6 +346,7 @@ class ShardParticles(Particles):
 
 
 class ImageParticles(Particles):
+
     def __init__(self, **init_values):
         super().__init__(**init_values)
         # noinspection PyTypeChecker
@@ -330,16 +354,17 @@ class ImageParticles(Particles):
         # noinspection PyTypeChecker
         self.surf: list[pygame.Surface] = [None] * len(self)
 
-    def new(self,
-            pos: Vec2Like,
-            vel: Vec2Like = (0, 0),
-            acc: Vec2Like = (0, 0),
-            color: ColorValue = (255, 255, 255, 255),
-            lifespan: float = 100,
-            size: float = 1.0,
-            surf: pygame.Surface = None,
-            **extra_data
-            ):
+    def new(
+        self,
+        pos: Vec2Like,
+        vel: Vec2Like = (0, 0),
+        acc: Vec2Like = (0, 0),
+        color: ColorValue = (255, 255, 255, 255),
+        lifespan: float = 100,
+        size: float = 1.0,
+        surf: pygame.Surface = None,
+        **extra_data,
+    ):
         index = super().new(pos, vel, acc, color, lifespan, size, original=surf, **extra_data)
         if self.original_surf[index] is None:
             raise ValueError("surf must be provided")
@@ -350,7 +375,8 @@ class ImageParticles(Particles):
         """Redraw the particle at the given index."""
         w, h = self.original_surf[index].get_size()
         ratio = self.size[index] / min(w, h)
-        surf = pygame.transform.smoothscale(self.original_surf[index], (int(w * ratio), int(h * ratio)))
+        surf = pygame.transform.smoothscale(self.original_surf[index],
+                                            (int(w * ratio), int(h * ratio)))
         surf.set_alpha(self.color[index, 3])
         self.surf[index] = surf
 
@@ -369,7 +395,8 @@ class ImageParticles(Particles):
 
 
 class TextParticles(Particles):
-    def __init__(self, font_name: str = SMALL_FONT, anchor: str = 'center', **init_values):
+
+    def __init__(self, font_name: str = SMALL_FONT, anchor: str = "center", **init_values):
         super().__init__(**init_values)
         self.font_name = font_name
         self.anchor = anchor
@@ -378,23 +405,28 @@ class TextParticles(Particles):
         self.surf: list[pygame.Surface] = [dummy] * len(self)
 
     # noinspection PyShadowingNames
-    def new(self,
-            pos: Vec2Like,
-            vel: Vec2Like = (0, 0),
-            acc: Vec2Like = (0, 0),
-            color: ColorValue = (255, 255, 255, 255),
-            lifespan: float = 100,
-            size: float = 1.0,
-            text: str = "",
-            **extra_data
-            ):
+    def new(
+        self,
+        pos: Vec2Like,
+        vel: Vec2Like = (0, 0),
+        acc: Vec2Like = (0, 0),
+        color: ColorValue = (255, 255, 255, 255),
+        lifespan: float = 100,
+        size: float = 1.0,
+        text: str = "",
+        **extra_data,
+    ):
         index = super().new(pos, vel, acc, color, lifespan, size, text=text, **extra_data)
         self.redraw(index)
 
     def redraw(self, index: int):
         """Redraw the particle at the given index."""
-        self.surf[index] = text(self.text[index], int(self.size[index]),
-                                tuple(self.color[index]), self.font_name)
+        self.surf[index] = text(
+            self.text[index],
+            int(self.size[index]),
+            tuple(self.color[index]),
+            self.font_name,
+        )
 
     def logic(self):
         last_size = self.size[:self.n_alive].copy()
@@ -434,6 +466,7 @@ class Distribution:
 @dataclass
 class JointDistribution(Distribution):
     """A joint distribution of values."""
+
     distributions: list[Distribution]
 
     def __init__(self, *distributions: Distribution | object):
@@ -452,6 +485,7 @@ class JointDistribution(Distribution):
 @dataclass
 class Gauss(Distribution):
     """A Gaussian distribution."""
+
     mean: float
     std: float
 
@@ -462,6 +496,7 @@ class Gauss(Distribution):
 @dataclass
 class Uniform(Distribution):
     """A uniform distribution."""
+
     a: float
     b: float
 
@@ -477,6 +512,7 @@ class Uniform(Distribution):
 @dataclass
 class Exp(Distribution):
     """An exponential distribution."""
+
     rate: float
 
     def __call__(self):
@@ -486,6 +522,7 @@ class Exp(Distribution):
 @dataclass
 class Polar(Distribution):
     """A polar distribution."""
+
     r: float | Distribution
     theta: float | Distribution
     """The angle in degrees."""
@@ -512,7 +549,6 @@ if __name__ == "__main__":
     SIZE = (1300, 800)
     T = TypeVar("T", bound=Particles)
 
-
     class Demo(State):
         BG_COLOR = (0, 0, 49)
 
@@ -530,7 +566,6 @@ if __name__ == "__main__":
                     size=10,
                 )
             self.debug.text(self.shard)
-
 
     app = App(Demo, FixedScreen(SIZE))
     app.USE_FPS_TITLE = True

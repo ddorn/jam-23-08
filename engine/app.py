@@ -65,7 +65,6 @@ class App(StateMachine):
         settings.save()
 
     def events(self):
-
         events = list(pygame.event.get())
         for event in events:
             if event.type == pygame.VIDEORESIZE:
@@ -75,7 +74,11 @@ class App(StateMachine):
                 new = self.screen.draw_surface.get_size()
                 if old != new:
                     self.state.resize(old, new)
-            elif event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP,):
+            elif event.type in (
+                    pygame.MOUSEMOTION,
+                    pygame.MOUSEBUTTONDOWN,
+                    pygame.MOUSEBUTTONUP,
+            ):
                 self.screen.fixup_mouse_input(event)
 
         self.state.handle_events(events)

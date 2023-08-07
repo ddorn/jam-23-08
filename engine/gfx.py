@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 __all__ = ["GFX", "WrapGFX", "CameraGFX"]
 
-
 # /!\ Experimental class.
 #
 # The main idea of this was to be a wrapper around pygame.draw and pygame.gfxdraw
@@ -30,7 +29,9 @@ __all__ = ["GFX", "WrapGFX", "CameraGFX"]
 #
 # For now, just think of GFX as a wrapper around pygame.Surface with a better .blit() method.
 
+
 class GFX:
+
     def __init__(self, surf: pygame.Surface):
         self.surf = surf
 
@@ -42,7 +43,13 @@ class GFX:
 
     # Draw functions
 
-    def line(self, color: ColorValue, start_pos: Vec2Like, end_pos: Vec2Like, ui: bool = False):
+    def line(
+        self,
+        color: ColorValue,
+        start_pos: Vec2Like,
+        end_pos: Vec2Like,
+        ui: bool = False,
+    ):
         """Draw a line in world coordinates. Does not support alpha."""
         start_pos = self.edit_pos(start_pos, ui)
         end_pos = self.edit_pos(end_pos, ui)
@@ -66,7 +73,13 @@ class GFX:
         rect = self.edit_rect(Rect(rect))
         pygame.gfxdraw.box(self.surf, rect, color)
 
-    def polygon(self, color: ColorValue, points: list[Vec2Like], width: int = 0, ui: bool = False):
+    def polygon(
+        self,
+        color: ColorValue,
+        points: list[Vec2Like],
+        width: int = 0,
+        ui: bool = False,
+    ):
         """Draw a polygon in world coordinates. Does not support alpha for width != 0."""
         points = [self.edit_pos(p, ui) for p in points]
         if width == 0:
@@ -74,7 +87,14 @@ class GFX:
         else:
             pygame.gfxdraw.aapolygon(self.surf, points, color)
 
-    def circle(self, color: ColorValue, pos: Vec2Like, radius: float, width: int = 0, ui: bool = False):
+    def circle(
+        self,
+        color: ColorValue,
+        pos: Vec2Like,
+        radius: float,
+        width: int = 0,
+        ui: bool = False,
+    ):
         """Draw a circle in world coordinates. Supports alpha for width = 0 or 1."""
         x, y = self.edit_pos(pos, ui)
 
@@ -85,7 +105,15 @@ class GFX:
         else:
             pygame.draw.circle(self.surf, color, (x, y), radius, width)
 
-    def text(self, color: ColorValue, txt: str, size: int, font_name: str = None, ui: bool = True, **anchor) -> Rect:
+    def text(
+        self,
+        color: ColorValue,
+        txt: str,
+        size: int,
+        font_name: str = None,
+        ui: bool = True,
+        **anchor,
+    ) -> Rect:
         """Draw text in world coordinates. Supports alpha."""
         surf = text(txt, size, color, font_name)
         return self.blit(surf, ui, **anchor)
@@ -105,7 +133,6 @@ class GFX:
         return {anchor: value}
 
     # Below are functions that need a closer look
-
     '''
     # Position / size conversion functions
 
@@ -235,7 +262,7 @@ class CameraGFX(GFX):
 
     @world_center.setter
     def world_center(self, pos: Vec2Like):
-        self.translation = -pygame.Vector2(pos) + pygame.Vector2(self.surf.get_size()) / 2
+        self.translation = (-pygame.Vector2(pos) + pygame.Vector2(self.surf.get_size()) / 2)
 
     def edit_pos(self, pos: Vec2Like, ui: bool = False):
         if ui:
@@ -254,6 +281,3 @@ class WrapGFX(GFX):
         pos.x %= self.surf.get_width()
         pos.y %= self.surf.get_height()
         return pos
-
-
-

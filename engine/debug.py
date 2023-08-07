@@ -121,7 +121,13 @@ class Debug(Object):
             return
 
         fps = len(self.frame_times) / (self.frame_times[-1] - self.frame_times[0])
-        gfx.text(WHITE, f"FPS: {int(fps)}", SMALL_TEXT_SIZE, SMALL_FONT, bottomleft=(4, H - 4))
+        gfx.text(
+            WHITE,
+            f"FPS: {int(fps)}",
+            SMALL_TEXT_SIZE,
+            SMALL_FONT,
+            bottomleft=(4, H - 4),
+        )
 
         if self.paused:
             # Restore the last data.
@@ -130,10 +136,10 @@ class Debug(Object):
             # Otherwise, we will have to extend it.
             self.points, self.vectors, self.rects, self.texts = self.lasts
 
-        for (x, y, color) in self.points:
+        for x, y, color in self.points:
             gfx.circle(color, (x, y), 1)
 
-        for (anchor, vec, color) in self.vectors:
+        for anchor, vec, color in self.vectors:
             gfx.line(color, anchor, anchor + vec)
 
         for rect, color in self.rects:
@@ -141,8 +147,14 @@ class Debug(Object):
 
         y = 3
         for i, obj in enumerate(self.texts):
-            color = WHITE if len(self.texts) - i - 1 >= self.nb_txt_this_frame else YELLOW
-            r = gfx.text(color, " ".join(map(str, obj)), SMALL_TEXT_SIZE, SMALL_FONT, topleft=(3, y))
+            color = (WHITE if len(self.texts) - i - 1 >= self.nb_txt_this_frame else YELLOW)
+            r = gfx.text(
+                color,
+                " ".join(map(str, obj)),
+                SMALL_TEXT_SIZE,
+                SMALL_FONT,
+                topleft=(3, y),
+            )
             y = r.bottom
 
         # Archiving of the data, so that we can get them back if we are paused.

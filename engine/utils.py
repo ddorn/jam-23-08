@@ -70,7 +70,6 @@ def lerp_multi(t: float, *points: tuple[float, float]) -> float:
     raise ValueError(f"Uh? t={t}, points={points}")
 
 
-
 def mix(color1, color2, t):
     """Mix two colors. Return color1 when t=0 and color2 when t=1."""
 
@@ -82,12 +81,12 @@ def mix(color1, color2, t):
 
 
 def chrange(
-        x: float,
-        initial_range: tuple[float, float],
-        target_range: tuple[float, float],
-        power=1,
-        flipped=False,
-        clamp=False,
+    x: float,
+    initial_range: tuple[float, float],
+    target_range: tuple[float, float],
+    power=1,
+    flipped=False,
+    clamp=False,
 ):
     """Change the range of a number by mapping the initial_range to target_range using a linear transformation."""
     normalised = (x - initial_range[0]) / (initial_range[1] - initial_range[0])
@@ -143,9 +142,9 @@ def smoothstep(x, x_min: float = 0, x_max: float = 1, n: int = 1):
 
     result = 0
     for k in range(0, n + 1):
-        result += math.comb(k + n, k) * math.comb(2 * n + 1, n - k) * (-x) ** k
+        result += math.comb(k + n, k) * math.comb(2 * n + 1, n - k) * (-x)**k
 
-    result *= x ** (n + 1)
+    result *= x**(n + 1)
 
     return result
 
@@ -178,7 +177,7 @@ def soft_clamp(x, mini: float, maxi: float, smooth_size: float):
     """
 
     def f(x):
-        return x ** 2 / 4 + x / 2 + 1 / 4
+        return x**2 / 4 + x / 2 + 1 / 4
 
     ss = smooth_size / 2
 
@@ -399,7 +398,12 @@ def overlay(image: pygame.Surface, color, alpha=255):
 
 
 def random_in_rect_and_avoid(
-        rect: pygame.Rect, avoid_positions, avoid_radius, max_trials=1000, force_y=None, default=None,
+    rect: pygame.Rect,
+    avoid_positions,
+    avoid_radius,
+    max_trials=1000,
+    force_y=None,
+    default=None,
 ):
     for trial in range(max_trials):
         if force_y is not None:
@@ -480,6 +484,7 @@ def gradient(t: float, *color_spec: tuple[float, ColorValue]) -> pygame.Color:
 
 
 class Cooldown:
+
     def __init__(self, duration: float):
         self.auto_lock = duration
         self.locked_for = 0

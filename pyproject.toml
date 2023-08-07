@@ -18,3 +18,9 @@ pandas = "^2.0.3"
 [build-system]
 requires = ["poetry>=0.12"]
 build-backend = "poetry.masonry.api"
+
+[tool.yapf]
+column_limit = 100
+continuation_align_style = "space"
+coalesce_brackets = true
+indent_dictionary_value = true
