@@ -13,7 +13,8 @@ import numpy as np
 import pygame.gfxdraw
 from pygame import Color, Vector2
 
-from engine import Vec2Like, GFX, State, from_polar, random_rainbow_color, App, FixedScreen, Object, CameraGFX
+from engine import Vec2Like, GFX, State, from_polar, random_rainbow_color, App, FixedScreen, Object, CameraGFX, \
+    SMALL_FONT, text
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
@@ -21,19 +22,27 @@ if TYPE_CHECKING:
 
 
 class Particles:
-    """A fast numpy-based particle system."""
+    """
+    A fast numpy-based particle system.
+
+    Implementation notes:
+    - All arrays and lists attributes are resized when the capacity is exceeded and reordered when particles die.
+    - If you need to store a list/ndarray of values that does not correspond to a particle, add it to the IGNORED_BUFFERS
+    """
+
+    IGNORED_BUFFERS = ('animations',)
 
     def __init__(self, **init_values):
         """Create a new particle system."""
         capacity = 64
 
+        self.n_alive = 0
         self.pos = np.zeros((capacity, 2))
         self.vel = np.zeros((capacity, 2))
         self.acc = np.zeros((capacity, 2))
         self.color = np.zeros((capacity, 4), dtype=np.uint8)
-        self.age = np.zeros(capacity, dtype=np.uint8)
-        self.lifespan = np.ones(capacity)
-        self.n_alive = 0
+        self.age = np.zeros(capacity, dtype=int)
+        self.lifespan = np.ones(capacity, dtype=int)
         self.size = np.zeros(capacity)
 
         self.init_values = init_values
@@ -84,13 +93,31 @@ class Particles:
         """Transparency of the particles."""
         return self.color[:, 3]
 
+    @property
+    def vel_x(self):
+        """X component of the velocity."""
+        return self.vel[:, 0]
+
+    @property
+    def vel_y(self):
+        """Y component of the velocity."""
+        return self.vel[:, 1]
+
     def resize(self, capacity: int):
         """Expand the capacity of the particle system."""
         assert capacity > len(self)
+        new_space = capacity - len(self)
 
         for name, array in self.__dict__.items():
-            if isinstance(array, np.ndarray):
+            if name in self.IGNORED_BUFFERS:
+                continue
+            elif isinstance(array, np.ndarray):
                 self.__dict__[name] = np.resize(array, (capacity, *array.shape[1:]))
+            elif isinstance(array, list):
+                array.extend([None] * new_space)
+            else:
+                continue
+
         print("Expanded to", capacity)
 
     def logic(self):
@@ -125,9 +152,16 @@ class Particles:
         # We copy the last alive particles into the dead slots
         last_alive = alive_indices[-n_dead:]
         dead_to_replace = dead_indices[:n_alive]
-        for array in self.__dict__.values():
-            if isinstance(array, np.ndarray):
+        for name, array in self.__dict__.items():
+            if name in self.IGNORED_BUFFERS:
+                continue
+            elif isinstance(array, np.ndarray):
                 array[dead_to_replace] = array[last_alive]
+            elif isinstance(array, list) and len(array) == len(self):
+                # The same for the list storages, but we need to do it one by one
+                for old, new in zip(dead_to_replace, last_alive):
+                    array[old] = array[new]
+
         self.n_alive = n_alive
         # Note: no need to reset to_kill, since it was also reordered
 
@@ -175,7 +209,7 @@ class Particles:
     def add_constant_speed(self, speed: Vec2Like):
         """Particles will move at a constant speed."""
 
-        def _anim(particles: Particles, life_prop: np.ndarray):
+        def _anim(particles: Particles, _life_prop: np.ndarray):
             particles.pos[:particles.n_alive] += speed
 
         return self.add_animation(_anim)
@@ -206,9 +240,10 @@ class Particles:
         """Print the data of one particle."""
         print("Particle", index)
         d = {
-            name: getattr(self, name)[index]
-            for name in self.__dict__
-            if isinstance(getattr(self, name), np.ndarray)
+            name: array[index]
+            for name, array in self.__dict__.items()
+            if name not in self.IGNORED_BUFFERS
+               and isinstance(array, (np.ndarray, list))
         }
         pprint(d)
 
@@ -281,8 +316,101 @@ class ShardParticles(Particles):
             pos - cross_dir,
         ]
         points = np.stack(points, axis=1).astype(int).tolist()
-        for ps, color in zip(points, self.color[:n].tolist()):
+        color = self.color[:n].tolist()
+        # noinspection PyTypeChecker
+        for ps, color in zip(points, color):
             gfx.polygon(color, ps)
+
+
+class ImageParticles(Particles):
+    def __init__(self, **init_values):
+        super().__init__(**init_values)
+        # noinspection PyTypeChecker
+        self.original_surf: list[pygame.Surface] = [None] * len(self)
+        # noinspection PyTypeChecker
+        self.surf: list[pygame.Surface] = [None] * len(self)
+
+    def new(self,
+            pos: Vec2Like,
+            vel: Vec2Like = (0, 0),
+            acc: Vec2Like = (0, 0),
+            color: ColorValue = (255, 255, 255, 255),
+            lifespan: float = 100,
+            size: float = 1.0,
+            surf: pygame.Surface = None,
+            **extra_data
+            ):
+        index = super().new(pos, vel, acc, color, lifespan, size, original=surf, **extra_data)
+        if self.original_surf[index] is None:
+            raise ValueError("surf must be provided")
+        self.surf[index] = self.original_surf[index].copy()
+        return index
+
+    def redraw(self, index: int):
+        """Redraw the particle at the given index."""
+        w, h = self.original_surf[index].get_size()
+        ratio = self.size[index] / min(w, h)
+        surf = pygame.transform.smoothscale(self.original_surf[index], (int(w * ratio), int(h * ratio)))
+        surf.set_alpha(self.color[index, 3])
+        self.surf[index] = surf
+
+    def logic(self):
+        last_size = self.size[:self.n_alive].copy()
+        super().logic()
+        # We redraw only the particles whose size changed
+        for i in np.nonzero(last_size != self.size[:self.n_alive])[0]:
+            self.redraw(i)
+
+    def draw(self, gfx: GFX):
+        pos = self.pos[:self.n_alive].astype(int).tolist()
+        for i in range(self.n_alive):
+            self.surf[i].set_alpha(self.color[i, 3])
+            gfx.blit(self.surf[i], center=pos[i])
+
+
+class TextParticles(Particles):
+    def __init__(self, font_name: str = SMALL_FONT, anchor: str = 'center', **init_values):
+        super().__init__(**init_values)
+        self.font_name = font_name
+        self.anchor = anchor
+        self.text: list[str] = [""] * len(self)
+        dummy = pygame.Surface((1, 1))
+        self.surf: list[pygame.Surface] = [dummy] * len(self)
+
+    # noinspection PyShadowingNames
+    def new(self,
+            pos: Vec2Like,
+            vel: Vec2Like = (0, 0),
+            acc: Vec2Like = (0, 0),
+            color: ColorValue = (255, 255, 255, 255),
+            lifespan: float = 100,
+            size: float = 1.0,
+            text: str = "",
+            **extra_data
+            ):
+        index = super().new(pos, vel, acc, color, lifespan, size, text=text, **extra_data)
+        self.redraw(index)
+
+    def redraw(self, index: int):
+        """Redraw the particle at the given index."""
+        self.surf[index] = text(self.text[index], int(self.size[index]),
+                                tuple(self.color[index]), self.font_name)
+
+    def logic(self):
+        last_size = self.size[:self.n_alive].copy()
+        super().logic()
+        # We redraw only the particles whose size changed
+        # Note: n_alive likely changed in super().logic()
+        changed_size = last_size[:self.n_alive] != self.size[:self.n_alive]
+        for i in np.nonzero(changed_size)[0]:
+            self.redraw(i)
+
+    def draw(self, gfx: GFX):
+        pos = self.pos[:self.n_alive].astype(int).tolist()
+        for i in range(self.n_alive):
+            surf = self.surf[i]
+            surf.set_alpha(self.color[i, 3])
+            gfx.blit(self.surf[i], **{self.anchor: pos[i]})
 
 
 def call_if_needed(x):
@@ -370,6 +498,8 @@ __all__ = [
     "Particles",
     "CircleParticles",
     "ShardParticles",
+    "ImageParticles",
+    "TextParticles",
     "Gauss",
     "Uniform",
     "Exp",

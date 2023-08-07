@@ -9,7 +9,7 @@ import pygame.gfxdraw
 from pygame import Rect, Vector2, Color
 
 from engine import *
-from particles_np import CircleParticles, ShardParticles, Gauss, Polar
+from particles_np import CircleParticles, Gauss, Polar, TextParticles
 
 PINK = pygame.Color("#E91E63")
 ORANGE = pygame.Color("#F39C12")
@@ -76,6 +76,13 @@ class Blob(Object):
         self.max_hist_size = max_hist_size
         self.points_to_draw = []
 
+        self.thoughts = (
+            TextParticles(anchor='midbottom', color=WHITE, lifespan=5 * 60, size=40)
+            .add_fade()
+            .animate('vel_y', lambda s: np.cos(s * 5 * 2 * np.pi) * 1 - 1 * s)
+            .add_to(self)
+        )
+
     def color(self, point_index: int):
         color = pygame.color.Color(0)
         angle = point_index / self.n_points * 36 + self.time / 10
@@ -103,6 +110,8 @@ class Blob(Object):
         return points
 
     def logic(self):
+        if random() < 0.1:
+            self.thoughts.new(pos=self.rect.midtop, text="I'm a blob!")
         last_points = self.mk_points()
         last_pos = self.pos.copy()
         super().logic()
