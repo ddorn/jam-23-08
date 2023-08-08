@@ -110,7 +110,8 @@ class Blob(Object):
 
     def logic(self):
         if random() < 0.1:
-            self.thoughts.new(pos=self.rect.midtop, text="I'm a blob!")
+            self.thoughts.new(pos=self.rect.midtop, text="I'm a blob!",
+                              color=WHITE if self.center.y > SURFACE else BLACK)
         last_points = self.mk_points()
         last_pos = self.pos.copy()
         super().logic()

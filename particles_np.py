@@ -7,11 +7,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pprint import pprint
 from random import gauss, uniform, expovariate
-from typing import TypeVar, TYPE_CHECKING, Callable
+from typing import TypeVar, TYPE_CHECKING, Callable, Union
 
 import numpy as np
 import pygame.gfxdraw
-from pygame import Color, Vector2
+from pygame import Vector2
 
 from engine import (
     Vec2Like,
@@ -24,12 +24,17 @@ from engine import (
     Object,
     CameraGFX,
     SMALL_FONT,
-    text,
+    text as get_text,
 )
 
 if TYPE_CHECKING:
     # noinspection PyProtectedMember
     from pygame._common import ColorValue
+
+T = TypeVar("T")
+CallableOr = Union[Callable[[], T], T]
+
+_DUMMY_SURFACE = pygame.Surface((1, 1))
 
 
 class Particles:
@@ -38,12 +43,20 @@ class Particles:
 
     Implementation notes:
     - All arrays and lists attributes are resized when the capacity is exceeded and reordered when particles die.
-    - If you need to store a list/ndarray of values that does not correspond to a particle, add it to the IGNORED_BUFFERS
+    - If you need to store a list/ndarray of values that does not correspond to a particle,
+        add it to the IGNORED_BUFFERS
     """
 
-    IGNORED_BUFFERS = ("animations", )
+    IGNORED_BUFFERS = ("animations",)
 
-    def __init__(self, **init_values):
+    def __init__(self,
+                 pos: CallableOr[Vec2Like] = (0, 0),
+                 vel: CallableOr[Vec2Like] = (0, 0),
+                 acc: CallableOr[Vec2Like] = (0, 0),
+                 color: CallableOr[ColorValue] = (255, 255, 255, 255),
+                 lifespan: CallableOr[float] = 60,
+                 size: CallableOr[float] = 10,
+                 **init_values):
         """Create a new particle system."""
         capacity = 64
 
@@ -56,7 +69,15 @@ class Particles:
         self.lifespan = np.ones(capacity, dtype=int)
         self.size = np.zeros(capacity)
 
-        self.init_values = init_values
+        self.init_values = {
+            "pos": pos,
+            "vel": vel,
+            "acc": acc,
+            "color": color,
+            "lifespan": lifespan,
+            "size": size,
+            **init_values,
+        }
 
         self.to_kill = np.zeros(capacity, dtype=bool)
         self.animations = []
@@ -68,35 +89,27 @@ class Particles:
         return len(self.pos)
 
     def new(
-        self,
-        pos: Vec2Like,
-        vel: Vec2Like = (0, 0),
-        acc: Vec2Like = (0, 0),
-        color: ColorValue = (255, 255, 255, 255),
-        lifespan: float = 60,
-        size: float = 1.0,
-        **extra_data,
+            self,
+            **overrides,
     ):
-        """Create a new particle."""
+        """Create a new particle.
+
+         Overrides the default values given in the constructor with those passed as arguments.
+         """
+
         if self.n_alive >= len(self):
             self.resize(len(self) * 2)
         index = self.n_alive
 
-        self.n_alive += 1
-        self.pos[index] = pos
-        self.vel[index] = vel
-        self.acc[index] = acc
-        self.color[index] = Color(color)
         self.age[index] = 0
-        self.lifespan[index] = lifespan
-        self.size[index] = size
-        for name, value in extra_data.items():
-            getattr(self, name)[index] = value
-
-        for name, value in self.init_values.items():
+        to_set = {**self.init_values, **overrides}
+        for name, value in to_set.items():
             if callable(value):
                 value = value()
+            if name == "color":
+                value = pygame.Color(value)
             getattr(self, name)[index] = value
+        self.n_alive += 1
 
         return index
 
@@ -296,34 +309,25 @@ class CircleParticles(Particles):
 
 class ShardParticles(Particles):
 
-    def __init__(self, **init_values):
+    def __init__(self,
+                 pos: CallableOr[Vec2Like] = (0, 0),
+                 vel: CallableOr[Vec2Like] = (0, 0),
+                 acc: CallableOr[Vec2Like] = (0, 0),
+                 color: CallableOr[ColorValue] = (255, 255, 255, 255),
+                 lifespan: CallableOr[float] = 60,
+                 size: CallableOr[float] = 10,
+                 tail_length: CallableOr[float] = 1.0,
+                 head_length: CallableOr[float] = 3.0,
+                 **init_values):
+        super().__init__(
+            pos, vel, acc, color, lifespan, size,
+            tail_length=tail_length, head_length=head_length,
+            **init_values
+        )
+
         super().__init__(**init_values)
         self.tail_length = np.zeros(len(self))
         self.head_length = np.zeros(len(self))
-
-    def new(
-        self,
-        pos: Vec2Like,
-        vel: Vec2Like = (0, 0),
-        acc: Vec2Like = (0, 0),
-        color: ColorValue = (255, 255, 255, 255),
-        lifespan: float = 100,
-        size: float = 1.0,
-        tail_length: float = 1.0,
-        head_length: float = 3.0,
-        **extra_data,
-    ):
-        return super().new(
-            pos,
-            vel,
-            acc,
-            color,
-            lifespan,
-            size,
-            tail_length=tail_length,
-            head_length=head_length,
-            **extra_data,
-        )
 
     def draw(self, gfx: GFX):
         n = self.n_alive
@@ -347,35 +351,37 @@ class ShardParticles(Particles):
 
 class ImageParticles(Particles):
 
-    def __init__(self, **init_values):
-        super().__init__(**init_values)
-        # noinspection PyTypeChecker
-        self.original_surf: list[pygame.Surface] = [None] * len(self)
-        # noinspection PyTypeChecker
-        self.surf: list[pygame.Surface] = [None] * len(self)
+    def __init__(self,
+                 pos: CallableOr[Vec2Like] = (0, 0),
+                 vel: CallableOr[Vec2Like] = (0, 0),
+                 acc: CallableOr[Vec2Like] = (0, 0),
+                 color: CallableOr[ColorValue] = (255, 255, 255, 255),
+                 lifespan: CallableOr[float] = 60,
+                 size: CallableOr[float] = 10,
+                 surf: CallableOr[pygame.Surface] = None,
+                 **init_values):
+        super().__init__(pos, vel, acc, color, lifespan, size,
+                         _original_surf=surf,
+                         **init_values)
 
-    def new(
-        self,
-        pos: Vec2Like,
-        vel: Vec2Like = (0, 0),
-        acc: Vec2Like = (0, 0),
-        color: ColorValue = (255, 255, 255, 255),
-        lifespan: float = 100,
-        size: float = 1.0,
-        surf: pygame.Surface = None,
-        **extra_data,
-    ):
-        index = super().new(pos, vel, acc, color, lifespan, size, original=surf, **extra_data)
-        if self.original_surf[index] is None:
-            raise ValueError("surf must be provided")
-        self.surf[index] = self.original_surf[index].copy()
+        self._original_surf: list[pygame.Surface] = [_DUMMY_SURFACE] * len(self)
+        self.surf: list[pygame.Surface] = [_DUMMY_SURFACE] * len(self)
+
+    def new(self, **overrides):
+        """Create a new particle."""
+        if "surf" in overrides:
+            overrides["_original_surf"] = overrides.pop("surf")
+        index = super().new()
+        if self._original_surf[index] is None:
+            raise ValueError("'surf' must be provided")
+        self.surf[index] = self._original_surf[index].copy()
         return index
 
     def redraw(self, index: int):
         """Redraw the particle at the given index."""
-        w, h = self.original_surf[index].get_size()
+        w, h = self._original_surf[index].get_size()
         ratio = self.size[index] / min(w, h)
-        surf = pygame.transform.smoothscale(self.original_surf[index],
+        surf = pygame.transform.smoothscale(self._original_surf[index],
                                             (int(w * ratio), int(h * ratio)))
         surf.set_alpha(self.color[index, 3])
         self.surf[index] = surf
@@ -396,32 +402,40 @@ class ImageParticles(Particles):
 
 class TextParticles(Particles):
 
-    def __init__(self, font_name: str = SMALL_FONT, anchor: str = "center", **init_values):
-        super().__init__(**init_values)
+    def __init__(self,
+                 pos: CallableOr[Vec2Like] = (0, 0),
+                 vel: CallableOr[Vec2Like] = (0, 0),
+                 acc: CallableOr[Vec2Like] = (0, 0),
+                 color: CallableOr[ColorValue] = (255, 255, 255, 255),
+                 lifespan: CallableOr[float] = 60,
+                 size: CallableOr[float] = 10,
+                 text: CallableOr[str] = "",
+                 font_name: str = SMALL_FONT,
+                 anchor: str = "center",
+                 **init_values):
+        """
+        Create a text particle system.
+
+        Args:
+            font_name: The font to use for the particles, shared by all of them.
+            anchor: The anchor point of the text, shared by all of them.
+        """
+        super().__init__(pos, vel, acc, color, lifespan, size,
+                         text=text,
+                         **init_values)
         self.font_name = font_name
         self.anchor = anchor
         self.text: list[str] = [""] * len(self)
-        dummy = pygame.Surface((1, 1))
-        self.surf: list[pygame.Surface] = [dummy] * len(self)
+        self.surf: list[pygame.Surface] = [_DUMMY_SURFACE] * len(self)
 
     # noinspection PyShadowingNames
-    def new(
-        self,
-        pos: Vec2Like,
-        vel: Vec2Like = (0, 0),
-        acc: Vec2Like = (0, 0),
-        color: ColorValue = (255, 255, 255, 255),
-        lifespan: float = 100,
-        size: float = 1.0,
-        text: str = "",
-        **extra_data,
-    ):
-        index = super().new(pos, vel, acc, color, lifespan, size, text=text, **extra_data)
+    def new(self, **overrides):
+        index = super().new(**overrides)
         self.redraw(index)
 
     def redraw(self, index: int):
         """Redraw the particle at the given index."""
-        self.surf[index] = text(
+        self.surf[index] = get_text(
             self.text[index],
             int(self.size[index]),
             tuple(self.color[index]),
@@ -433,6 +447,7 @@ class TextParticles(Particles):
         super().logic()
         # We redraw only the particles whose size changed
         # Note: n_alive likely changed in super().logic()
+        # FIXME: This is not sufficient. The order of the particles may have changed.
         changed_size = last_size[:self.n_alive] != self.size[:self.n_alive]
         for i in np.nonzero(changed_size)[0]:
             self.redraw(i)
@@ -547,7 +562,7 @@ __all__ = [
 
 if __name__ == "__main__":
     SIZE = (1300, 800)
-    T = TypeVar("T", bound=Particles)
+
 
     class Demo(State):
         BG_COLOR = (0, 0, 49)
@@ -566,6 +581,7 @@ if __name__ == "__main__":
                     size=10,
                 )
             self.debug.text(self.shard)
+
 
     app = App(Demo, FixedScreen(SIZE))
     app.USE_FPS_TITLE = True
