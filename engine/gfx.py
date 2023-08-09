@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Union, Literal
 
 import numpy as np
@@ -34,6 +35,7 @@ class GFX:
 
     def __init__(self, surf: pygame.Surface):
         self.surf = surf
+        self.force_ui = False
 
     def blit(self, surf, ui: bool = False, **anchor):
         """Blit a surface directly on the underlying surface, coordinates are in pixels."""
@@ -55,9 +57,9 @@ class GFX:
         end_pos = self.edit_pos(end_pos, ui)
         pygame.draw.line(self.surf, color, start_pos, end_pos)
 
-    def rect(self, color: ColorValue, x, y, w, h, width=0, anchor: str = None):
+    def rect(self, color: ColorValue, x, y, w, h, width=0, anchor: str = None, ui: bool = False):
         """Draw a rectangle in world coordinates. Does not support alpha for width != 0."""
-        x, y = self.edit_pos((x, y))
+        x, y = self.edit_pos((x, y), ui)
         r = pygame.Rect(x, y, w, h)
 
         if anchor:
@@ -68,9 +70,13 @@ class GFX:
         else:
             pygame.draw.rect(self.surf, color, r, width)
 
-    def box(self, color: ColorValue, rect: RectValue):
+        # Note that this might not be useful, especially when the position is edited.
+        # It might make sense only for ui=True.
+        return r
+
+    def box(self, color: ColorValue, rect: RectValue, ui: bool = False):
         """Draw a filled rectangle in world coordinates. Supports alpha."""
-        rect = self.edit_rect(Rect(rect))
+        rect = self.edit_rect(Rect(rect), ui)
         pygame.gfxdraw.box(self.surf, rect, color)
 
     def polygon(
@@ -115,6 +121,8 @@ class GFX:
         **anchor,
     ) -> Rect:
         """Draw text in world coordinates. Supports alpha."""
+        if isinstance(color, (list, pygame.Color)):
+            color = tuple(color)
         surf = text(txt, size, color, font_name)
         return self.blit(surf, ui, **anchor)
 
@@ -132,62 +140,16 @@ class GFX:
         value = self.edit_pos(value, ui)
         return {anchor: value}
 
+    @contextmanager
+    def ui(self, value: bool = True):
+        """All calls inside the context-manager will have ui=value"""
+        old_ui = self.force_ui
+        self.force_ui = value
+        yield
+        self.force_ui = old_ui
+
     # Below are functions that need a closer look
     '''
-    # Position / size conversion functions
-
-    def to_ui(self, pos):
-        """Convert a position in the screen to ui coordinates."""
-        return pygame.Vector2(pos) / self.ui_scale
-
-    def to_world(self, pos):
-        """Convert a position in the screen to world coordinates."""
-        # noinspection PyTypeChecker
-        return (
-            pygame.Vector2(pos)
-            - (self.surf.get_width() / 2, self.surf.get_height() / 2)
-        ) / self.world_scale + self.world_center
-
-    def scale_ui_pos(self, x, y):
-        return (int(x * self.surf.get_width()), int(y * self.surf.get_height()))
-
-    def scale_world_size(self, w, h):
-        return (int(w * self.world_scale), int(h * self.world_scale))
-
-    def scale_world_pos(self, x, y):
-        return (
-            int((x - self.world_center.x) * self.world_scale)
-            + self.surf.get_width() // 2,
-            int((y - self.world_center.y) * self.world_scale)
-            + self.surf.get_height() // 2,
-        )
-
-    # Surface related functions
-
-    @lru_cache(maxsize=2000)
-    def scale_surf(self, surf: pygame.Surface, factor):
-        if factor == 1:
-            return surf
-        if isinstance(factor, (tuple, pygame.Vector2)):
-            size = (int(factor[0]), int(factor[1]))
-        else:
-            size = (int(surf.get_width() * factor), int(surf.get_height() * factor))
-        return pygame.transform.scale(surf, size)
-
-    def ui_blit(self, surf: pygame.Surface, **anchor):
-        assert len(anchor) == 1
-        anchor, value = anchor.popitem()
-
-        s = self.scale_surf(surf, self.ui_scale)
-        r = s.get_rect(**{anchor: self.scale_ui_pos(*value)})
-        self.surf.blit(s, r)
-
-    def world_blit(self, surf, pos, size, anchor="topleft"):
-        s = self.scale_surf(surf, vec2int(size * self.world_scale))
-        r = s.get_rect(**{anchor: pos * self.world_scale})
-        r.topleft -= self.world_center
-        self.surf.blit(s, r)
-
     def grid(self, surf, pos, blocks, steps, color=(255, 255, 255, 100)):
         """
         Draw a grid in world space.
@@ -207,9 +169,6 @@ class GFX:
             pygame.gfxdraw.line(surf, x, top, x, bottom, color)
         for y in range(blocks[0] + 1):
             pygame.gfxdraw.line(surf, left, y, right, y, color)
-
-    def fill(self, color):
-        self.surf.fill(color)
 
     def scroll(self, dx, dy):
         self.surf.scroll(dx, dy)
@@ -240,7 +199,6 @@ class GFX:
     def wrap_text(self, txt, size, color, max_width, font_name=None, align=False, **anchor):
         t = wrapped_text(txt, size, color, max_width, font_name, align)
         return self.blit(t, **anchor)
-
     '''
 
     def fill(self, color: ColorValue):
@@ -265,7 +223,7 @@ class CameraGFX(GFX):
         self.translation = (-pygame.Vector2(pos) + pygame.Vector2(self.surf.get_size()) / 2)
 
     def edit_pos(self, pos: Vec2Like, ui: bool = False):
-        if ui:
+        if ui or self.force_ui:
             return pos
         return pos[0] + self.translation.x, pos[1] + self.translation.y
 
@@ -275,7 +233,7 @@ class WrapGFX(GFX):
     def edit_pos(self, pos: Vec2Like, ui: bool = False):
         """Return position so that it is on screen as if the screen was a torus."""
         # We need to copy here, modifying in place might affect the user
-        if ui:
+        if ui or self.force_ui:
             return pos
         pos = Vector2(pos)
         pos.x %= self.surf.get_width()

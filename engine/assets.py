@@ -76,7 +76,8 @@ def font(size: int, name: str = None):
 
 @lru_cache(10000)
 def text(txt, size, color, font_name=None):
-    return font(size, font_name).render(txt, False, color)
+    antialias = ANTI_ALIAS.get(font_name or BIG_FONT, True)
+    return font(size, font_name).render(txt, antialias, color)
 
 
 @lru_cache(1000)

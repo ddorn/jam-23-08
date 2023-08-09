@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 CallableOr = Union[Callable[[], T], T]
 
-_DUMMY_SURFACE = pygame.Surface((1, 1))
+_DUMMY_SURFACE = pygame.Surface((100, 100))
 
 
 class Particles:
@@ -79,8 +79,16 @@ class Particles:
             **init_values,
         }
 
-        self.to_kill = np.zeros(capacity, dtype=bool)
         self.animations = []
+        self.to_kill = np.zeros(capacity, dtype=bool)
+        self.last_dead_alive_swap = (np.empty(0, dtype=int), np.empty(0, dtype=int))
+        """
+        A tuple of two arrays, the first one containing the indices of the dead particles to replace,
+        the second one containing the indices of the last alive particles to swap with the dead ones.
+        All particles attributes have moved with:
+            array[dead_to_replace] = array[last_alive]
+        This is useful to track is some attributes have changed.
+        """
 
     def __str__(self):
         return f"Particles({self.n_alive} alive, capacity={len(self)})"
@@ -88,10 +96,7 @@ class Particles:
     def __len__(self):
         return len(self.pos)
 
-    def new(
-            self,
-            **overrides,
-    ):
+    def new(self, **overrides):
         """Create a new particle.
 
          Overrides the default values given in the constructor with those passed as arguments.
@@ -143,7 +148,7 @@ class Particles:
             else:
                 continue
 
-        print("Expanded to", capacity)
+        print(f"Resized {self} to {capacity} particles")
 
     def logic(self):
         """Update all the particles."""
@@ -169,24 +174,26 @@ class Particles:
         n = self.n_alive
         dead_indices = np.nonzero(self.to_kill[:n])[0]
         if len(dead_indices) == 0:
+            self.last_dead_alive_swap = (np.empty(0, dtype=int), np.empty(0, dtype=int))
             return
         alive_indices = np.nonzero(~self.to_kill[:n])[0]
         n_dead = len(dead_indices)
         n_alive = len(alive_indices)
         assert n_dead + n_alive == n
         # We copy the last alive particles into the dead slots
-        last_alive = alive_indices[-n_dead:]
         dead_to_replace = dead_indices[:n_alive]
+        last_alive = alive_indices[-n_dead:]
         for name, array in self.__dict__.items():
             if name in self.IGNORED_BUFFERS:
                 continue
             elif isinstance(array, np.ndarray):
-                array[dead_to_replace] = array[last_alive]
+                array[:n][dead_to_replace] = array[:n][last_alive]
             elif isinstance(array, list) and len(array) == len(self):
                 # The same for the list storages, but we need to do it one by one
                 for old, new in zip(dead_to_replace, last_alive):
                     array[old] = array[new]
 
+        self.last_dead_alive_swap = (dead_to_replace, last_alive)
         self.n_alive = n_alive
         # Note: no need to reset to_kill, since it was also reordered
 
@@ -241,12 +248,22 @@ class Particles:
 
     # Utility functions
 
-    def add_to(self, target: State | Object):
-        """Add the particle system to a state or the state of an object."""
+    def add_to(self, target: State | Object, z_index: int = None):
+        """
+        Add the particle system to a state or the state of an object.
+
+        Args:
+            target: The state or object to add the particle system to.
+            z_index: The z-index of the particle system in the state.
+        """
         # Note: this function exists because we don't want Particles to be a subclass of Object
 
+        obj = ParticleObject(self)
+        if z_index is not None:
+            obj.Z = z_index
+
         if isinstance(target, State):
-            target.add(ParticleObject(self))
+            target.add(obj)
         elif isinstance(target, Object):
             if target.state is None:
                 # Here the object has not been added to a state yet, so we add it
@@ -254,10 +271,10 @@ class Particles:
                 @target.add_script_decorator
                 def _add_later():
                     yield
-                    target.state.add(ParticleObject(self))
+                    target.state.add(obj)
 
             else:
-                target.state.add(ParticleObject(self))
+                target.state.add(obj)
         else:
             raise TypeError("state must be a State or an Object")
         return self
@@ -271,6 +288,10 @@ class Particles:
             if name not in self.IGNORED_BUFFERS and isinstance(array, (np.ndarray, list))
         }
         pprint(d)
+
+    def empty(self):
+        """Remove all particles."""
+        self.n_alive = 0
 
 
 class ParticleObject(Object):
@@ -425,7 +446,7 @@ class TextParticles(Particles):
                          **init_values)
         self.font_name = font_name
         self.anchor = anchor
-        self.text: list[str] = [""] * len(self)
+        self.text: list[str] = ["h7Y4dR"] * len(self)  # Placeholder to notice if something goes wrong
         self.surf: list[pygame.Surface] = [_DUMMY_SURFACE] * len(self)
 
     # noinspection PyShadowingNames
@@ -446,8 +467,8 @@ class TextParticles(Particles):
         last_size = self.size[:self.n_alive].copy()
         super().logic()
         # We redraw only the particles whose size changed
-        # Note: n_alive likely changed in super().logic()
-        # FIXME: This is not sufficient. The order of the particles may have changed.
+        dead_to_replace, last_alive = self.last_dead_alive_swap
+        last_size[dead_to_replace] = last_size[last_alive]
         changed_size = last_size[:self.n_alive] != self.size[:self.n_alive]
         for i in np.nonzero(changed_size)[0]:
             self.redraw(i)

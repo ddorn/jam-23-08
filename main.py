@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from random import gauss, random, randrange, uniform, choice, expovariate
+from random import gauss, random, randrange, uniform, choice, expovariate, shuffle
 from time import time
 
 import numpy as np
@@ -76,49 +76,110 @@ class Blob(Object):
         self.points_to_draw = []
 
         self.thoughts = (
-            TextParticles(anchor='midbottom', color=WHITE, lifespan=5 * 60, size=40)
+            TextParticles(anchor='midbottom', lifespan=5 * 60, font_name=BIG_FONT)
             .add_fade()
+            .animate('alpha', lambda s: np.interp(s, [0, 0.02, 1], [0, 255, 0]))
             .animate('vel_y', lambda s: np.cos(s * 5 * 2 * np.pi) * 1 - 1 * s)
-            .add_to(self)
+            .add_to(self, self.Z + 1)
         )
+        self.last_thought = 0
+        self.thoughts_done = set()
+        self.bong_combo = 0
+        self.last_bong = 0
+        self.ouch_count = 0
+        self.last_ouch = 0
+        self.achievements = set()
 
-    def color(self, point_index: int):
-        color = pygame.color.Color(0)
-        angle = point_index / self.n_points * 36 + self.time / 10
-        angle = angle % 36 / 36  # between 0 and 1, looping
-        if self.hue_range is not None:
-            angle = math.sin(angle * math.pi)
-            angle = self.hue_range[0] + angle * (self.hue_range[1] - self.hue_range[0])
-        else:
-            angle *= 360
+    def think(self, txt: str, color: Color = None, force: bool = True, once: bool = True, big: bool = False) -> bool:
+        if not force and self.last_thought < 60:
+            print(f"Skipped thought: {txt}, {self.last_thought} | not forced")
+            return False
+        if once and txt in self.thoughts_done:
+            print(f"Skipped thought: {txt}, {self.last_thought} | already done")
+            return False
 
-        color.hsva = (angle, 70, 90, 100)
-        return color
+        x, y = self.rect.midtop
+        y = clamp(y, SURFACE - H / 2 + 100, OTHER_SIDE + H / 2 - 100)
+        if color is None:
+            color = WHITE if y > SURFACE + 50 else BLACK
+        size = 60 if big else 40
+        self.thoughts.new(pos=(x, y), text=txt, color=color, size=size)
+        self.last_thought = 0
+        self.thoughts_done.add(txt)
+        return True
 
-    def mk_points(self):
-        points = []
-        angle = math.pi * 2 / self.n_points
-        for i in range(self.n_points):
-            angle_i = angle * i + self.time / 10 + self.point_angle_shift[i]
-            point = (self.center + pygame.Vector2(
-                math.cos(angle_i),
-                math.sin(angle_i),
-            ) * self.point_dist[i] * self.radius)
-            radius = max(2, int(self.point_radius[i] * self.part_radius))
-            points.append([point, self.color(i), radius])
-        return points
+    def think_multi(self, *txts: str, color: Color = None, force: bool = True, once: bool = True, big: bool = False) -> bool:
+        if once and txts[0] in self.thoughts_done:
+            print(f"Skipped thought: {txts[0]}, {self.last_thought} | already done - multi")
+            return False
+
+        @self.add_script_decorator
+        def _():
+            for txt in txts:
+                while not self.think(txt, color, force, False, big):
+                    yield from range(60)
+                yield from range(60)
+
+        return True
+
+    def script(self):
+        yield from range(30)
+        for i in range(1, 4):
+            txt = (
+                    "A" * randrange(4, 6 + i)
+                    + "H" * randrange(1, 2 + i)
+                    + "!" * randrange(1, 2 + i)
+            )
+            self.think(txt, RED, once=False, big=True)
+            yield from range(randrange(8, 20 - i * 2))
+
+        yield from self.wait_until(lambda: self.pos.y > SURFACE)
+        self.achieve("Got wet", "You got wet!")
+        self.think("Oh", BLACK)
+        yield from range(15)
+        self.think("I guess I'm fine?")
+        yield from range(15)
+
+        def chance(n):
+            """Returns True in expectation every n seconds"""
+            return random() < 1 / (n * 60)
+
+        while True:
+            yield
+            if chance(5):
+                thought = choice([
+                    "It's so quiet here...",
+                    "How did I get here?",
+                    "Why am I doing this?",
+                    "Should I stay or should I go?",
+                    "Something is fishy...",
+                ])
+                self.think(thought, force=False)
+            elif chance(60):
+                self.think_multi(
+                    "I think...",
+                    "Therefore I am?!",
+                    force=False,
+                )
+                self.achieve("Self-awareness")
+
+    def achieve(self, name: str, description: str = ""):
+        if name in self.achievements:
+            return
+        self.state.add(Achievement(name, description))
+        self.achievements.add(name)
 
     def logic(self):
-        if random() < 0.1:
-            self.thoughts.new(pos=self.rect.midtop, text="I'm a blob!",
-                              color=WHITE if self.center.y > SURFACE else BLACK)
         last_points = self.mk_points()
         last_pos = self.pos.copy()
-        super().logic()
+        self.last_thought += 1
+        self.last_ouch += 1
         self.time += 1
-        alpha = 0.02
 
-        # Add some randomness to the points
+        super().logic()
+
+        # Draw: Add some randomness to the points
+        alpha = 0.02
         self.point_dist = alpha + (1 - alpha) * (self.point_dist +
                                                  np.random.normal(0, self.std, self.radius))
         self.point_angle_shift = (1 - alpha) * (self.point_angle_shift +
@@ -127,53 +188,64 @@ class Blob(Object):
                                                    np.random.normal(0, self.std * 2, self.radius))
 
         # Apply gravity
-        # if self.pos.y < (SURFACE + OTHER_SIDE) / 2:
-        #     gravity = chrange(self.pos.y, (SURFACE, SURFACE + 800), (0.3, 1.0), clamp=True)
-        # else:
-        #     gravity = chrange(self.pos.y, (OTHER_SIDE - 800, OTHER_SIDE), (1.0, -0.3), clamp=True)
-        if self.pos.y < SURFACE:
-            gravity = 0.3
-        elif self.pos.y > OTHER_SIDE:
-            gravity = -0.3
-        else:
-            gravity = 0
-        self.vel.y += gravity
+        if self.controllable:
+            if self.pos.y < SURFACE:
+                gravity = 0.3
+            elif self.pos.y > OTHER_SIDE:
+                gravity = -0.3
+            else:
+                gravity = 0
+            self.vel.y += gravity
 
-        # Move
-        if self.pos.y < SURFACE:
-            self.vel *= 0.99
-        elif self.pos.y > OTHER_SIDE:
-            self.vel *= 0.99
-        else:
-            if self.controllable:
+            # Move
+            if self.pos.y < SURFACE:
+                self.vel *= 0.98
+            elif self.pos.y > OTHER_SIDE:
+                self.vel *= 0.98
+            else:
                 keys = pygame.key.get_pressed()
                 self.vel.x += (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * self.acceleration
                 self.vel.y += (keys[pygame.K_DOWN] - keys[pygame.K_UP]) * self.acceleration
-            self.vel *= self.friction
+                self.vel *= self.friction
+
+        self.do_collisions()
 
         # If entering/exiting water, make a splash
         self.make_splash(last_pos)
 
-        # Add enough circle between the last and the current position that it appears a smooth line
+        # Stop the bong streak if needed
+        self.last_bong += 1
+        if self.last_bong > 15 and not self.airborn:
+            self.bong_combo = 0
+        self.state.debug.text(self.bong_combo)
+
+        # Draw: Add enough circle between the last and the current position that it appears a smooth line
         for (p1, color, radius), (p2, _, _) in zip(last_points, self.mk_points()):
             dist = p1.distance_to(p2)
             direction = (p2 - p1).normalize()
             for j in range(0, int(dist), max(3, radius // 3)):
                 point = p1 + direction * j
                 self.points_to_draw.append((point, color, radius, (self.time, j)))
-
-        # Remove old points
-        # self.points_to_draw.sort(key=lambda x: x[3])
+        # Draw: Remove old points
+        self.hist_size = min(self.hist_size, self.max_hist_size)
         self.points_to_draw = [
             p for p in self.points_to_draw if self.time - p[3][0] < self.hist_size
         ]
 
+    def do_collisions(self):
         # Check collision with fairies
         fairy: Fairy
-        for fairy in self.state.get_all(Fairy):
-            if (fairy.pos.distance_to(self.pos) < fairy.radius + self.radius + self.part_radius):
-                fairy.alive = False
+        for obj in self.state.objects:
+            if not self.collides(obj):
+                continue
+
+            if isinstance(obj, Fairy):
+                obj.alive = False
                 self.hist_size += 3
+                self.bong_combo += 1
+                self.last_bong = 0
+                self.add_speed_buff(obj.hue)
+                # Generate shards particles
                 for i in range(self.n_points):
                     angle = i * 360 / self.n_points
                     color = from_hsv(angle, 70, 90)
@@ -188,20 +260,68 @@ class Blob(Object):
                     )
                     # fmt: on
 
-                self.add_speed_buff(fairy.hue)
-
                 for _ in rrange(1.5):
                     self.state.add(Fairy(random_in_rect(SCREEN.move(self.pos - (W / 2, H / 2)))))
 
-        self.hist_size = min(self.hist_size, self.max_hist_size)
+            elif isinstance(obj, Enemy) and self.last_ouch > 30:
+                self.ouch_count += 1
+                self.last_ouch = 0
+                self.state.do_shake(4, 10)
+                if self.think_multi("Hey!! Don't do that again!", "It was scary...", big=True):
+                    pass
+                elif self.think_multi("What did I say?", "DON'T DO THAT!", big=True):
+                    pass
+                else:
+                    self.think("I'm outta here!", big=True)
+                    @self.add_script_decorator
+                    def _run_away():
+                        pos = self.pos.copy()
+                        target = (pos.x, SURFACE - 300)
+                        for i in range(20):
+                            self.pos = pos.lerp(target, i / 20)
+                            yield
+                        self.state.replace_state(EndState(self.state))
 
-    def add_speed_buff(self, angle: float):
+                angle = (self.pos - obj.pos).angle_to((0, 1))
+                self.add_speed_buff(angle, False)
+
+    def collides(self, other: Object):
+        try:
+            # noinspection PyUnresolvedReferences
+            return self.pos.distance_to(other.pos) < self.radius + self.part_radius + other.radius
+        except AttributeError:
+            return self.rect.colliderect(other.rect)
+
+    def add_speed_buff(self, angle: float, yiha_thought: bool = True):
 
         @self.add_script_decorator
         def speed_buff():
             for _ in range(10):
-                self.vel = from_polar(30, angle)
+                self.vel = from_polar(20, angle)
                 yield
+
+        # Think
+        if not yiha_thought:
+            return
+        base_yihas = ["Wohoo!", "Yay!",
+                      "Boing", "Plop!", "Bong!",
+                      "!!!", "Oh yeah!", "Yesss", "Yess",
+                      "YOOOOO", "Hell yeah!",
+                      "What?", "I love this!", "!!!!!",
+                      "YES YES YES",
+                      ]
+        if self.bong_combo > 7:
+            shuffle(base_yihas)
+            base_yihas = base_yihas[:3]
+            base_yihas += ["WOW WOW WOW", "I can't stooop!", "I'm on fire!"]
+        if self.bong_combo > 4:
+            base_yihas += ["Wow!", "Amazing!", "Unbelievable!"]
+        if self.bong_combo > 1:
+            base_yihas += ["Combo!", f"Combo x{self.bong_combo}"]
+        if self.bong_combo > 0:
+            base_yihas += ["Bong bong!"]
+        yiha = choice(base_yihas)
+        self.think(yiha, from_hsv(angle, 70, 90), once=False)
 
     def make_splash(self, last_pos: pygame.Vector2):
         mini = min(self.pos.y, last_pos.y)
@@ -252,6 +372,12 @@ class Blob(Object):
                     )
                     # fmt: on
 
+    @property
+    def airborn(self):
+        return self.pos.y < SURFACE or self.pos.y > OTHER_SIDE
+
+    # Drawing related
+
     def draw(self, gfx: GFX, force_alpha: float | None = None):
         super().draw(gfx)
         for point, color, radius, (t, _) in reversed(self.points_to_draw):
@@ -260,7 +386,59 @@ class Blob(Object):
             else:
                 multiplier = 1 - (self.time - t) / self.hist_size
 
-            gfx.circle(fainter(color, multiplier), point, radius)
+            try:
+                gfx.circle(fainter(color, multiplier), point, radius)
+            except ValueError:
+                print(multiplier, self.time, t, self.hist_size, color)
+                raise
+
+    def color(self, point_index: int):
+        color = pygame.color.Color(0)
+        angle = point_index / self.n_points * 36 + self.time / 10
+        angle = angle % 36 / 36  # between 0 and 1, looping
+        if self.hue_range is not None:
+            angle = math.sin(angle * math.pi)
+            angle = self.hue_range[0] + angle * (self.hue_range[1] - self.hue_range[0])
+        else:
+            angle *= 360
+
+        color.hsva = (angle, 70, 90, 100)
+        return color
+
+    def mk_points(self):
+        points = []
+        angle = math.pi * 2 / self.n_points
+        for i in range(self.n_points):
+            angle_i = angle * i + self.time / 10 + self.point_angle_shift[i]
+            point = (self.center + pygame.Vector2(
+                math.cos(angle_i),
+                math.sin(angle_i),
+            ) * self.point_dist[i] * self.radius)
+            radius = max(2, int(self.point_radius[i] * self.part_radius))
+            points.append([point, self.color(i), radius])
+        return points
+
+
+class Achievement(Object):
+    SIZE = 300, 100
+
+    def __init__(self, name: str, description: str):
+        r = Rect((0, 0), self.SIZE)
+        r.bottomright = (W - 10, H - 10)
+        super().__init__(r.topleft, r.size)
+        self.name = name
+        self.description = description
+
+    def script(self):
+        yield from range(60 * 6)
+        self.alive = False
+
+    def draw(self, gfx: GFX):
+        super().draw(gfx)
+
+        gfx.box((33, 33, 33, 128), self.rect, ui=True)
+        r = gfx.text("#FFC107", self.name, topleft=self.pos + Vector2(10, 10), size=30)
+        gfx.text("#FFEB3B", self.description, topleft=r.bottomleft + Vector2(0, 10), size=20)
 
 
 class Ocean(Object):
@@ -280,7 +458,7 @@ class Ocean(Object):
                      lambda lp: np.interp(lp,
                                           [0, 0.3, 0.7, 1],
                                           [0, 120, 120, 0]))
-            .add_to(self)
+            .add_to(self, self.Z + 1)
         )
         self.wave_particles = (
             CircleParticles(lifespan=60,
@@ -288,7 +466,7 @@ class Ocean(Object):
                             vel=Polar(Gauss(1, 0.5), Gauss(-90, 15)))
             .add_fade()
             .add_constant_speed((0, 1))
-            .add_to(self)
+            .add_to(self, self.Z + 1)
         )
         # fmt: on
 
@@ -522,13 +700,15 @@ class GameState(State):
                 elif event.key == pygame.K_f:
                     self.FPS = 1000 if self.FPS == 60 else 60
                     self.debug.text("FPS cap: " + str(self.FPS))
+                elif event.key == pygame.K_d:
+                    self.replace_state(EndState(self))
 
     def logic(self):
         super().logic()
 
         # Create new fairies below
-        if random() < 0.01:
-            self.add(Fairy(random_in_rect(SCREEN.move(self.blob.pos - (W / 2, -H / 2)))))
+        if random() < 0.04:
+            self.add(Fairy(random_in_rect(SCREEN.move(self.blob.pos - (W / 2, H / 2)))))
 
         # De-pop objects that are too far away if we have too many
         stuff = list(self.get_all(Fairy, Enemy))
@@ -566,6 +746,54 @@ class GameState(State):
         # Clamp the camera y so that the surfaces never cross half the screen
         y = soft_clamp(y, SURFACE, OTHER_SIDE, 10 * METERS_TO_Y)
         return Vector2(x, y)
+
+
+class EndState(State):
+    BG_COLOR = None
+
+    def __init__(self, game: GameState):
+        super().__init__()
+        self.blob = self.add(game.blob)
+        self.blob.vel *= 0
+        self.blob.controllable = False
+        self.blob.thoughts.add_to(self)
+        self.blob.thoughts.empty()
+        self.fog = game.fog
+        self.show_menu = 1
+
+    def script(self):
+        yield from range(60 * 2)
+        self.blob.think("We would not be here if you had listened...", Color("#B7410E"), big=True)
+        yield from range(90)
+        self.blob.think("But now we are here. So what do you want to do?")
+        self.show_menu = self.timer
+
+    def draw(self, gfx: CameraGFX):
+        a = self.timer * 2
+        if a < 256:
+            self.fog.set_alpha(self.timer)
+        else:
+            self.fog.set_alpha(None)
+        gfx.blit(self.fog, ui=True, topleft=(0, 0))
+        super().draw(gfx)
+
+        if not self.show_menu:
+            return
+
+        b = self.timer - self.show_menu
+        with gfx.ui():
+            r = gfx.rect(DARK, W/2, H/2, 300, 100, 1, "center")
+            r_top = Rect(r)
+            r_top.bottom = r.top - 50
+            gfx.box(tuple(ORANGE)[:3] + (128,), r_top)
+            gfx.rect(DARK, *r_top, 1)
+            gfx.text(DARK, "Fall from high (again?)", size=40, center=r_top.center)
+            r_bottom = r.copy()
+            r_bottom.top = r.bottom + 50
+            gfx.rect(DARK, *r_bottom, 1)
+            gfx.box(tuple(ORANGE)[:3] + (128,), r_bottom)
+            gfx.text(DARK, "Spread love in the world", size=40, center=r_bottom.center)
+
 
 
 class Game(App):

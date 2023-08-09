@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from enum import Enum
 from random import randint
 from typing import List, Optional, Tuple, Type, TypeVar, Union, TYPE_CHECKING
@@ -44,7 +46,9 @@ class State(Scriptable):
         self.add_object_lock = False
         self.objects = set()
         self.next_state = (StateOperations.NOP, self)
+
         self.shake = 0
+        self.shake_strength = 3
 
         self.particles = ParticleSystem()
 
@@ -164,7 +168,7 @@ class State(Scriptable):
             self.particles.draw(gfx)
 
         if self.shake:
-            s = 3
+            s = self.shake_strength
             gfx.surf.scroll(randint(-s, s), randint(-s, s))
             self.shake -= 1
 
@@ -213,9 +217,11 @@ class State(Scriptable):
                     yield object
                     break
 
-    def do_shake(self, frames):
+    def do_shake(self, frames: int, strength: int | None = None):
         """Shake the screen for the given number of frames."""
         assert frames >= 0
+        if strength is not None:
+            self.shake_strength = strength
         self.shake += frames
 
     def update_bg(self):

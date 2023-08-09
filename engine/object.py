@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, TYPE_CHECKING, Generator
+from typing import Optional, Tuple, TYPE_CHECKING, Generator, Callable
 
 import pygame
 
@@ -30,23 +30,32 @@ class Scriptable:
 
     def __init__(self):
         self.scripts = set()
+        # To allow scripts to add other scripts
+        self.scripts_to_add = set()
+        self.script_add_lock = False
 
     def add_script(self, generator: Generator):
-        self.scripts.add(generator)
+        if self.script_add_lock:
+            self.scripts_to_add.add(generator)
+        else:
+            self.scripts.add(generator)
 
     def add_script_decorator(self, function):
-        self.scripts.add(function())
+        self.add_script(function())
 
     def logic(self):
         """Call the next frame of each script."""
 
         to_remove = set()
+        self.script_add_lock = True
         for script in self.scripts:
             try:
                 next(script)
             except StopIteration:
                 to_remove.add(script)
         self.scripts.difference_update(to_remove)
+        self.script_add_lock = False
+        self.scripts.update(self.scripts_to_add)
 
     def do_later(self, nb_of_frames):
         """Decorator to automatically call a function :nb_of_frames: later.
@@ -73,6 +82,12 @@ class Scriptable:
             return func
 
         return decorator
+
+    def wait_until(self, condition: Callable[[], bool]) -> Generator:
+        """Script that wait and does nothing until the condition is met."""
+        while not condition():
+            yield
+
 
 
 class Object(Scriptable):

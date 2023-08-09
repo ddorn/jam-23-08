@@ -18,9 +18,13 @@ WHITE = (192, 203, 220)
 GREEN = (166, 226, 46)
 
 SMALL_FONT = "pixelmillennium"
-BIG_FONT = "ThaleahFat"
+BIG_FONT = "Borel-Regular"
 SMALL_TEXT_SIZE = 16
 BIG_TEXT_SIZE = 32
+ANTI_ALIAS = {
+    SMALL_FONT: False,
+    BIG_FONT: True,
+}
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 IMAGES = ASSETS_DIR / "images"
