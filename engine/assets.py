@@ -101,7 +101,7 @@ def colored_text(size, *parts, name=None):
 
 
 @lru_cache()
-def wrapped_text(txt: str, size, color, max_width, name=None, align_right=False):
+def wrapped_text(txt: str, size, color, max_width, name=None, align_right=False) -> pygame.Surface:
     f = font(size, name)
 
     words = txt.split()
@@ -119,9 +119,8 @@ def wrapped_text(txt: str, size, color, max_width, name=None, align_right=False)
     w = max(s.get_width() for s in surfaces)
     h = sum(s.get_height() for s in surfaces)
 
-    output = pygame.Surface((w, h))
-    output.fill(1)  # 1 is #000001 which is a color I never use (hopefully)
-    output.set_colorkey(1)
+    output = pygame.Surface((w, h), pygame.SRCALPHA)
+    output.fill((0, 0, 0, 0))
 
     y = 0
     for surf in surfaces:

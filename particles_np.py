@@ -4,10 +4,11 @@ A fast numpy-based particle system.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from pprint import pprint
 from random import gauss, uniform, expovariate
-from typing import TypeVar, TYPE_CHECKING, Callable, Union
+from typing import TypeVar, TYPE_CHECKING, Callable, Union, Iterable, cast
 
 import numpy as np
 import pygame.gfxdraw
@@ -18,13 +19,12 @@ from engine import (
     GFX,
     State,
     from_polar,
-    random_rainbow_color,
     App,
     FixedScreen,
     Object,
     CameraGFX,
     SMALL_FONT,
-    text as get_text,
+    text as get_text, wrapped_text,
 )
 
 if TYPE_CHECKING:
@@ -50,15 +50,18 @@ class Particles:
     IGNORED_BUFFERS = ("animations",)
 
     def __init__(self,
+                 *,
                  pos: CallableOr[Vec2Like] = (0, 0),
                  vel: CallableOr[Vec2Like] = (0, 0),
                  acc: CallableOr[Vec2Like] = (0, 0),
                  color: CallableOr[ColorValue] = (255, 255, 255, 255),
                  lifespan: CallableOr[float] = 60,
                  size: CallableOr[float] = 10,
+                 draw_sorted_by: 'str' = None,
                  **init_values):
         """Create a new particle system."""
         capacity = 64
+        self.draw_sorted_by = draw_sorted_by
 
         self.n_alive = 0
         self.pos = np.zeros((capacity, 2))
@@ -197,6 +200,15 @@ class Particles:
         self.n_alive = n_alive
         # Note: no need to reset to_kill, since it was also reordered
 
+    def draw_order(self) -> Iterable[int]:
+        """Iterate over the indices of the particles to draw."""
+        if self.draw_sorted_by is None:
+            return range(self.n_alive)
+        else:
+            if self.draw_sorted_by[0] == "-":
+                return np.argsort(-getattr(self, self.draw_sorted_by[1:])[:self.n_alive])
+            return np.argsort(getattr(self, self.draw_sorted_by)[:self.n_alive])
+
     def draw(self, gfx: GFX):
         """Draw all the particles."""
         raise NotImplementedError
@@ -227,6 +239,68 @@ class Particles:
 
         def _anim(particles: Particles, life_prop: np.ndarray):
             getattr(particles, attr)[:particles.n_alive] = easing(life_prop)
+
+        return self.add_animation(_anim)
+
+    def interpolate(self, attr: str, times: list[float], values: list[float], clip: bool = True):
+        """
+        Interpolate an attribute of the particle system.
+
+        Args:
+            attr: The name of the attribute to interpolate.
+            times: The times at which the values are given. Must be sorted and in [0, 1].
+            values: The values to interpolate to. Must be the same length as times.
+            clip: Whether to clip the values to the range of `times`. (e.g. if times = [0.5, 1] and values = [0, 1],
+                any particle with a life_prop below 0.5 will get the value 0.
+
+        Notes:
+            This works only on attributes that are 1D numpy arrays.
+        """
+
+        times = np.array(times)
+        values = np.array(values)
+
+        def _anim(particles: Particles, life_prop: np.ndarray):
+            if clip and (times[0] > 0 or times[1] < 1):
+                life_prop = life_prop.clip(times[0], times[-1])
+            getattr(particles, attr)[:particles.n_alive] = np.interp(life_prop, times, values)
+
+        return self.add_animation(_anim)
+
+    def lerp(self, attr: str, start_value, end_value, start_time: float = 0.0, end_time: float = 1.0, power: float = 1.0):
+        """
+        Interpolate an attribute of the particle system between two values.
+
+        Args:
+            attr: The name of the attribute to interpolate.
+            start_value: The value of the attribute at the start time.
+            end_value: The value of the attribute at the end time.
+            start_time: The time at which the value is `start_value`.
+            end_time: The time at which the value is `end_value`.
+            power: The power of the interpolation. 1 = linear, 2 = quadratic, etc.
+
+        Notes:
+            This works only on attributes that are numpy arrays, but they can have any number of dimensions.
+            Any particle with a life_prop below `start_time` will get the value `start_value` and similarly for
+            the end of the range.
+        """
+
+        # We use floats, because for types like int8 (color), we might go the wrong way around the modulo.
+        start_value = np.array(start_value, dtype=float)
+        end_value = np.array(end_value, dtype=float)
+
+        def _anim(particles: Particles, life_prop: np.ndarray):
+            if start_time > 0 or end_time < 1:
+                life_prop = np.clip(life_prop, start_time, end_time)
+
+            if power != 1:
+                life_prop = life_prop ** power
+
+            # Un-squeeze life_prop so that it has one more dimension than start_value
+            for _ in range(start_value.ndim):
+                life_prop = life_prop[:, None]
+
+            getattr(particles, attr)[:particles.n_alive] = start_value + (end_value - start_value) * life_prop
 
         return self.add_animation(_anim)
 
@@ -313,35 +387,54 @@ class ParticleObject(Object):
 class CircleParticles(Particles):
 
     def draw(self, gfx: GFX):
+        # Using tolist() at once is faster than unpacking ndarray for each particle
         radius = self.size[:self.n_alive].astype(int).tolist()
 
-        if isinstance(gfx, CameraGFX):
+        if type(gfx) is CameraGFX and isinstance(gfx, CameraGFX):  # second check is for mypy
             # Shortcircuit for speed
             pos = self.pos[:self.n_alive] + gfx.translation
             pos = pos.astype(int).tolist()
-            for color, pos, radius in zip(self.color[:self.n_alive], pos, radius):
-                pygame.gfxdraw.filled_circle(gfx.surf, *pos, radius, color)
+            for idx in self.draw_order():
+                pygame.gfxdraw.filled_circle(gfx.surf, *pos[idx], radius[idx], self.color[idx])
             return
 
         pos = self.pos[:self.n_alive].astype(int).tolist()
-        for i in range(self.n_alive):
-            gfx.circle(self.color[i], Vector2(pos[i]), radius[i])
+        if type(gfx) is GFX:
+            # Shortcircuit GFX for speed
+            for idx in self.draw_order():
+                pygame.gfxdraw.filled_circle(gfx.surf, *pos[idx], radius[idx], self.color[idx])
+        else:
+            for idx in self.draw_order():
+                gfx.circle(self.color[idx], pos[idx], radius)
+
+
+class SquareParticles(Particles):
+    def draw(self, gfx: GFX):
+        size = self.size[:self.n_alive].astype(int).tolist()
+        pos = (self.pos[:self.n_alive] - self.size[:self.n_alive, None] / 2).astype(int).tolist()
+
+        for idx in self.draw_order():
+            s = size[idx]
+            gfx.rect(self.color[idx], *pos[idx], s, s)
 
 
 class ShardParticles(Particles):
 
     def __init__(self,
+                 *,
                  pos: CallableOr[Vec2Like] = (0, 0),
                  vel: CallableOr[Vec2Like] = (0, 0),
                  acc: CallableOr[Vec2Like] = (0, 0),
                  color: CallableOr[ColorValue] = (255, 255, 255, 255),
                  lifespan: CallableOr[float] = 60,
                  size: CallableOr[float] = 10,
+                 draw_sorted_by: 'str' = None,
                  tail_length: CallableOr[float] = 1.0,
                  head_length: CallableOr[float] = 3.0,
                  **init_values):
         super().__init__(
-            pos, vel, acc, color, lifespan, size,
+            pos=pos, vel=vel, acc=acc, color=color, lifespan=lifespan, size=size,
+            draw_sorted_by=draw_sorted_by,
             tail_length=tail_length, head_length=head_length,
             **init_values
         )
@@ -363,27 +456,32 @@ class ShardParticles(Particles):
             pos - direction * self.tail_length[:n, None],
             pos - cross_dir,
         ]
-        points = np.stack(points, axis=1).astype(int).tolist()
+        point_list = cast(list[list[tuple[int, int]]], np.stack(points, axis=1).astype(int).tolist())
         color = self.color[:n].tolist()
-        # noinspection PyTypeChecker
-        for ps, color in zip(points, color):
-            gfx.polygon(color, ps)
+
+        for idx in self.draw_order():
+            gfx.polygon(color[idx], point_list[idx])
 
 
 class ImageParticles(Particles):
 
     def __init__(self,
+                 *,
                  pos: CallableOr[Vec2Like] = (0, 0),
                  vel: CallableOr[Vec2Like] = (0, 0),
                  acc: CallableOr[Vec2Like] = (0, 0),
                  color: CallableOr[ColorValue] = (255, 255, 255, 255),
                  lifespan: CallableOr[float] = 60,
                  size: CallableOr[float] = 10,
+                 draw_sorted_by: 'str' = None,
                  surf: CallableOr[pygame.Surface] = None,
                  **init_values):
-        super().__init__(pos, vel, acc, color, lifespan, size,
-                         _original_surf=surf,
-                         **init_values)
+        super().__init__(
+            pos=pos, vel=vel, acc=acc, color=color, lifespan=lifespan, size=size,
+            draw_sorted_by=draw_sorted_by,
+            _original_surf=surf,
+            **init_values
+        )
 
         self._original_surf: list[pygame.Surface] = [_DUMMY_SURFACE] * len(self)
         self.surf: list[pygame.Surface] = [_DUMMY_SURFACE] * len(self)
@@ -416,7 +514,7 @@ class ImageParticles(Particles):
 
     def draw(self, gfx: GFX):
         pos = self.pos[:self.n_alive].astype(int).tolist()
-        for i in range(self.n_alive):
+        for i in self.draw_order():
             self.surf[i].set_alpha(self.color[i, 3])
             gfx.blit(self.surf[i], center=pos[i])
 
@@ -424,12 +522,14 @@ class ImageParticles(Particles):
 class TextParticles(Particles):
 
     def __init__(self,
+                 *,
                  pos: CallableOr[Vec2Like] = (0, 0),
                  vel: CallableOr[Vec2Like] = (0, 0),
                  acc: CallableOr[Vec2Like] = (0, 0),
                  color: CallableOr[ColorValue] = (255, 255, 255, 255),
                  lifespan: CallableOr[float] = 60,
                  size: CallableOr[float] = 10,
+                 draw_sorted_by: 'str' = None,
                  text: CallableOr[str] = "",
                  font_name: str = SMALL_FONT,
                  anchor: str = "center",
@@ -441,7 +541,8 @@ class TextParticles(Particles):
             font_name: The font to use for the particles, shared by all of them.
             anchor: The anchor point of the text, shared by all of them.
         """
-        super().__init__(pos, vel, acc, color, lifespan, size,
+        super().__init__(pos=pos, vel=vel, acc=acc, color=color, lifespan=lifespan, size=size,
+                         draw_sorted_by=draw_sorted_by,
                          text=text,
                          **init_values)
         self.font_name = font_name
@@ -475,7 +576,7 @@ class TextParticles(Particles):
 
     def draw(self, gfx: GFX):
         pos = self.pos[:self.n_alive].astype(int).tolist()
-        for i in range(self.n_alive):
+        for i in self.draw_order():
             surf = self.surf[i]
             surf.set_alpha(self.color[i, 3])
             gfx.blit(self.surf[i], **{self.anchor: pos[i]})
@@ -498,6 +599,10 @@ class Distribution:
         """Combine two distributions into a joint distribution."""
         return JointDistribution(self, other)
 
+    def __add__(self, other):
+        """Return the sum of two distributions."""
+        return SumDistribution(self, other)
+
 
 @dataclass
 class JointDistribution(Distribution):
@@ -516,6 +621,19 @@ class JointDistribution(Distribution):
 
     def __call__(self):
         return tuple(call_if_needed(d) for d in self.distributions)
+
+
+@dataclass
+class SumDistribution(Distribution):
+    """A sum of two distributions."""
+
+    a: Distribution
+    b: Distribution
+
+    def __call__(self):
+        a = call_if_needed(self.a)
+        b = call_if_needed(self.b)
+        return a + b
 
 
 @dataclass
@@ -567,6 +685,24 @@ class Polar(Distribution):
         return from_polar(call_if_needed(self.r), call_if_needed(self.theta))
 
 
+class ImagePosDistribution(Distribution):
+    """A position sampled from the non-transparent pixels of an image."""
+
+    def __init__(self, image: pygame.Surface, **anchor: Vec2Like):
+        self.image = image
+        self.anchor = anchor
+
+        self.non_transparent = np.argwhere(pygame.surfarray.pixels_alpha(self.image) != 0)
+        self.n_pixels = len(self.non_transparent)
+        self.offset = self.image.get_rect(**self.anchor).topleft
+
+        assert self.n_pixels > 0, "Text must have at least one non-transparent pixel"
+
+    def __call__(self):
+        i = random.randrange(0, self.n_pixels)
+        return self.non_transparent[i] + self.offset
+
+
 __all__ = [
     "Particles",
     "CircleParticles",
@@ -583,25 +719,40 @@ __all__ = [
 
 if __name__ == "__main__":
     SIZE = (1300, 800)
-
+    from pygame import Color
 
     class Demo(State):
-        BG_COLOR = (0, 0, 49)
+        # BG_COLOR = "#22c1c3"
+        BG_COLOR = "#FAFAFA"
 
         def __init__(self):
             super().__init__()
-            self.shard = CircleParticles().add_fade().add_to(self)
+            image = wrapped_text("Joyeux anniversaire Esther!", 110, "#ffffff", SIZE[0])
+
+            self.p_generator = (
+                CircleParticles(
+                    pos=ImagePosDistribution(image, center=Vector2(SIZE) / 2),
+                    size=3,
+                    lifespan=60,
+                    acc=Polar(0.02, Uniform.angle()),
+                    draw_sorted_by='-age',
+                )
+                # Interpolate between #fdbb2d and #22c1c3
+                # .lerp('color', Color("#ff9966"), Color("#ff5e62"), power=1)
+                .interpolate('alpha', [0, 0.05, 0.4, 1], [0, 255, 5, 0])
+                .interpolate('size', [0.3, 0.6, 1], [8, 15, 100])
+                .add_to(self)
+            )
 
         def logic(self):
             super().logic()
             for _ in range(100):
-                self.shard.new(
-                    pos=(SIZE[0] / 2, SIZE[1] / 2),
-                    vel=from_polar(gauss(4, 0.5), uniform(0, 360)),
-                    color=random_rainbow_color(70, 90),
-                    size=10,
+                idx = self.p_generator.new(
+                    # vel=from_polar(gauss(1, 0.3), gauss(-20, 4))
                 )
-            self.debug.text(self.shard)
+                x = self.p_generator.pos[idx, 0]
+                self.p_generator.color[idx] = Color("#ff9966").lerp(Color("#ff5e62"), x / SIZE[0])
+            self.debug.text(self.p_generator)
 
 
     app = App(Demo, FixedScreen(SIZE))
